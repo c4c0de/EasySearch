@@ -16,3 +16,7 @@ publish/
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Markdown files (prompt plans, notes)
+*.md
+!README.md
