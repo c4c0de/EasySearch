@@ -1,0 +1,18 @@
+# Production secrets (connection strings, etc.) — never commit
+appsettings.Production.json
+**/appsettings.Production.json
+
+# Build outputs & IDE
+[Bb]in/
+[Oo]bj/
+publish/
+.DS_Store
+.vs/
+.vscode/
+.idea/
+
+# SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

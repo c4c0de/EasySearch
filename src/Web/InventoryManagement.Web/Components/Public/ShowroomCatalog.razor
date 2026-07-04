@@ -1,0 +1,172 @@
+@inherits CatalogBase
+@using InventoryManagement.Application.DTOs
+@using InventoryManagement.Domain.Enums
+@using InventoryManagement.Web.Services
+@inject SiteConfigService SiteConfigSvc
+
+<div class="showroom-container">
+    <!-- Hero Banner -->
+    <section class="showroom-hero">
+        <div class="showroom-hero-content">
+            <h1 class="showroom-hero-title">Find Quality Spare Parts Fast</h1>
+            <p class="showroom-hero-subtitle">Search verified OEM & used car parts by make, model, year, and type.</p>
+            <div class="showroom-hero-search">
+                <svg class="search-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" class="hero-search-input" placeholder="Search by part name, car make (e.g. Swift, Headlight)..."
+                       value="@filter.SearchTerm" @oninput="OnSearchInput" />
+                @if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
+                {
+                    <button class="clear-search-btn" @onclick="() => { filter.SearchTerm = null; _ = LoadListings(); }">✕</button>
+                }
+            </div>
+        </div>
+    </section>
+
+    <!-- Horizontal Filter Chips Bar -->
+    <section class="showroom-filter-bar">
+        <div class="showroom-filter-chips">
+            <div class="chip-item">
+                <label>Car Make</label>
+                <input type="text" class="chip-input" list="showroom-makes" placeholder="All makes"
+                       value="@filter.VehicleMake" @oninput="OnMakeInput" />
+                <datalist id="showroom-makes">
+                    @foreach (var m in makes)
+                    {
+                        <option value="@m" />
+                    }
+                </datalist>
+            </div>
+
+            <div class="chip-item">
+                <label>Year</label>
+                <input type="number" class="chip-input year-chip" placeholder="Year"
+                       value="@(filter.Year?.ToString() ?? "")"
+                       @onchange="OnYearChange" min="1990" max="2030" />
+            </div>
+
+            <div class="chip-item">
+                <label>Part Type</label>
+                <select class="chip-input" value="@(filter.CategoryId?.ToString() ?? "")" @onchange="OnCategoryDropdownChange">
+                    <option value="">All Part Types</option>
+                    @foreach (var cat in FlatCategories(categories))
+                    {
+                        <option value="@cat.Id">@cat.Name</option>
+                    }
+                </select>
+            </div>
+
+            <div class="chip-item price-chip-group">
+                <label>Price Range (₹)</label>
+                <div class="chip-price-inputs">
+                    <input type="number" class="chip-input price-input" placeholder="Min" @bind="filter.MinPrice" @bind:after="() => _ = LoadListings()" />
+                    <span>–</span>
+                    <input type="number" class="chip-input price-input" placeholder="Max" @bind="filter.MaxPrice" @bind:after="() => _ = LoadListings()" />
+                </div>
+            </div>
+
+            <div class="chip-item">
+                <label>Availability</label>
+                <select class="chip-input" @bind="StatusFilter" @bind:after="() => _ = LoadListings()">
+                    <option value="">All Parts</option>
+                    @foreach (var s in Enum.GetValues<ListingStatus>())
+                    {
+                        <option value="@s">@s</option>
+                    }
+                </select>
+            </div>
+
+            <div class="chip-item chip-sort">
+                <label>Sort By</label>
+                <select class="chip-input" @bind="filter.SortBy" @bind:after="() => _ = LoadListings()">
+                    <option value="CreatedAt">Newest First</option>
+                    <option value="Price">Price</option>
+                    <option value="Make">Car Make</option>
+                </select>
+            </div>
+
+            @if (HasActiveFilters)
+            {
+                <div class="chip-item chip-clear">
+                    <button class="btn-clear-all" @onclick="ClearAllFilters">Clear Filters</button>
+                </div>
+            }
+        </div>
+    </section>
+
+    <!-- Main Grid Content -->
+    <main class="showroom-main">
+        @if (loading)
+        {
+            <div class="loading-spinner">Loading inventory…</div>
+        }
+        else if (result is null || result.Items.Count == 0)
+        {
+            <div class="empty-state">
+                <h3>No spare parts found</h3>
+                <p>Try broadening your search criteria or clearing active filters.</p>
+                @if (HasActiveFilters)
+                {
+                    <button class="btn-primary" @onclick="ClearAllFilters">Clear All Filters</button>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="showroom-grid">
+                @foreach (var item in result.Items)
+                {
+                    <ShowroomListingCard Listing="item" />
+                }
+            </div>
+
+            <div class="pagination showroom-pagination">
+                <button class="btn-secondary" disabled="@(!result.HasPreviousPage)" @onclick="PrevPage">← Previous</button>
+                <span class="pagination-info">Page <strong>@result.PageNumber</strong> of <strong>@result.TotalPages</strong> (@result.TotalCount parts)</span>
+                <button class="btn-secondary" disabled="@(!result.HasNextPage)" @onclick="NextPage">Next Page →</button>
+            </div>
+        }
+    </main>
+</div>
+
+@code {
+    private bool HasActiveFilters =>
+        !string.IsNullOrWhiteSpace(filter.SearchTerm) ||
+        !string.IsNullOrWhiteSpace(filter.VehicleMake) ||
+        filter.Year.HasValue ||
+        filter.CategoryId.HasValue ||
+        filter.MinPrice.HasValue ||
+        filter.MaxPrice.HasValue ||
+        filter.Status != ListingStatus.Available;
+
+    private async Task ClearAllFilters()
+    {
+        filter = new InventoryFilterQuery { DealerId = DefaultDealerId, Status = ListingStatus.Available };
+        await LoadListings();
+    }
+
+    private async Task OnCategoryDropdownChange(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString();
+        filter.CategoryId = Guid.TryParse(val, out var id) ? id : null;
+        filter.PageNumber = 1;
+        await LoadListings();
+    }
+
+    private IEnumerable<CategoryDto> FlatCategories(IEnumerable<CategoryDto> tree, int depth = 0)
+    {
+        foreach (var node in tree)
+        {
+            yield return new CategoryDto
+            {
+                Id = node.Id,
+                Name = new string(' ', depth * 2) + node.Name,
+                Slug = node.Slug
+            };
+            if (node.SubCategories?.Count > 0)
+            {
+                foreach (var child in FlatCategories(node.SubCategories, depth + 1))
+                    yield return child;
+            }
+        }
+    }
+}

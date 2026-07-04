@@ -1,0 +1,78 @@
+@using InventoryManagement.Application.DTOs
+@using InventoryManagement.Domain.Enums
+
+<div class="listing-card @StatusClass">
+    <div class="listing-img-wrap">
+        @if (!string.IsNullOrEmpty(Listing.ImageUrl))
+        {
+            <img src="@Listing.ImageUrl" alt="@Listing.CategoryName" class="listing-img" />
+        }
+        else
+        {
+            <div class="no-image-card">No Photo</div>
+        }
+        <span class="status-badge @StatusClass">@Listing.Status</span>
+    </div>
+
+    <div class="listing-body">
+        <p class="listing-vehicle">@Listing.VehicleDisplay</p>
+        <h4 class="listing-title">@Listing.Heading</h4>
+        @if (!string.IsNullOrWhiteSpace(Listing.Title))
+        {
+            <p class="listing-subtitle">@Listing.CategoryName</p>
+        }
+        @if (!string.IsNullOrEmpty(Listing.Description))
+        {
+            <p class="listing-desc">@Listing.Description</p>
+        }
+        @if (Listing.Price.HasValue)
+        {
+            <p class="retail-price">₹@Listing.Price.Value.ToString("N0")</p>
+        }
+        else
+        {
+            <p class="listing-desc" style="font-style:italic">Contact for price</p>
+        }
+    </div>
+
+    <div class="contact-actions">
+        @if (!string.IsNullOrWhiteSpace(Listing.WhatsAppNumber))
+        {
+            <a class="contact-btn wa-btn" href="@WhatsAppUrl" target="_blank" rel="noopener noreferrer">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38c1.45.79 3.08 1.21 4.79 1.21 5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2zm5.8 14.01c-.24.68-1.42 1.31-1.96 1.36-.5.05-1.13.07-1.83-.11-.42-.13-.96-.31-1.66-.61-2.92-1.26-4.82-4.2-4.97-4.39-.15-.2-1.19-1.58-1.19-3.01s.75-2.13 1.02-2.42c.27-.29.58-.36.78-.36.19 0 .39 0 .56.01.18.01.42-.07.66.5.24.59.82 2.04.89 2.19.07.15.12.32.02.51-.09.2-.14.32-.27.49-.14.17-.29.38-.41.5-.14.14-.28.29-.12.57.16.27.71 1.17 1.53 1.9 1.05.93 1.94 1.22 2.21 1.36.27.14.43.12.59-.07.16-.2.68-.79.86-1.06.18-.27.36-.22.61-.13.25.09 1.58.75 1.85.88.27.14.45.2.52.32.07.11.07.66-.17 1.34z"/></svg>
+                WhatsApp
+            </a>
+        }
+        @if (!string.IsNullOrWhiteSpace(Listing.InstagramUsername))
+        {
+            <a class="contact-btn ig-btn" href="@InstagramUrl" target="_blank" rel="noopener noreferrer">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41a3.7 3.7 0 0 1-1.38-.9 3.7 3.7 0 0 1-.9-1.38c-.16-.42-.36-1.06-.41-2.23C2.17 15.58 2.16 15.2 2.16 12s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41C8.42 2.17 8.8 2.16 12 2.16zm0 3.68A6.16 6.16 0 1 0 18.16 12 6.16 6.16 0 0 0 12 5.84zm0 10.16A4 4 0 1 1 16 12a4 4 0 0 1-4 4zm6.41-10.41a1.44 1.44 0 1 0 1.44 1.44 1.44 1.44 0 0 0-1.44-1.44z"/></svg>
+                Instagram
+            </a>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public InventoryListingDto Listing { get; set; } = null!;
+
+    private string StatusClass => Listing.Status switch
+    {
+        ListingStatus.Available => "status-active",
+        ListingStatus.Sold => "status-sold",
+        ListingStatus.Reserved => "status-reserved",
+        _ => ""
+    };
+
+    private string WhatsAppUrl
+    {
+        get
+        {
+            var price = Listing.Price.HasValue ? $" (₹{Listing.Price.Value:N0})" : "";
+            var msg = $"Hello! I'm interested in {Listing.Heading} for {Listing.VehicleDisplay}{price}. Is this still available?";
+            return $"https://wa.me/{Listing.WhatsAppNumber}?text={Uri.EscapeDataString(msg)}";
+        }
+    }
+
+    private string InstagramUrl => $"https://instagram.com/{Listing.InstagramUsername}";
+}

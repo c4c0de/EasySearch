@@ -1,0 +1,85 @@
+@page "/contact"
+@layout PublicLayout
+@using InventoryManagement.Application.DTOs
+@using InventoryManagement.Application.Interfaces
+@using InventoryManagement.Web.Services
+@inject ISiteContentRepository ContentRepo
+@inject SiteConfigService SiteConfigSvc
+
+<PageTitle>Contact Us — @config?.BrandName</PageTitle>
+
+<div class="legal-page">
+    <h1>Contact Us</h1>
+    @if (config is not null)
+    {
+        <p class="legal-updated">Last updated: @config.LastUpdated</p>
+        @((MarkupString)introHtml)
+
+        <div class="branch-grid">
+            @foreach (var b in config.Branches)
+            {
+                <div class="contact-card branch-card">
+                    <h2>
+                        @b.Name
+                        @if (b.IsPrimary && config.Branches.Count > 1)
+                        {
+                            <span class="attr-filter-badge" style="margin-left:8px">Main</span>
+                        }
+                    </h2>
+                    <p>
+                        <strong>Address:</strong> @b.Address<br />
+                        @if (!string.IsNullOrWhiteSpace(b.Email))
+                        {
+                            <strong>Email:</strong> <a href="mailto:@b.Email">@b.Email</a><br />
+                        }
+                        @if (!string.IsNullOrWhiteSpace(b.Phone))
+                        {
+                            <strong>Phone:</strong> <a href="tel:@b.Phone.Replace(" ", "")">@b.Phone</a><br />
+                        }
+                        @if (!string.IsNullOrWhiteSpace(b.Hours))
+                        {
+                            <strong>Business hours:</strong> @b.Hours
+                        }
+                        @if (!string.IsNullOrWhiteSpace(config.Get(SettingKeys.UdyamRegistrationNumber)) && b.IsPrimary)
+                        {
+                            <br /><span><strong>Udyam Reg. No.:</strong> @config.Get(SettingKeys.UdyamRegistrationNumber)</span>
+                        }
+                    </p>
+                    @if (!string.IsNullOrWhiteSpace(b.MapsUrl))
+                    {
+                        <a href="@b.MapsUrl" target="_blank" rel="noopener noreferrer">📍 View on map</a>
+                    }
+                </div>
+            }
+        </div>
+
+        <h2>Grievance / Nodal Officer</h2>
+        <p>For complaints or escalations, you may reach our Grievance Officer:</p>
+        <div class="contact-card">
+            <p>
+                <strong>@config.GrievanceOfficerName</strong><br />
+                @config.LegalName, @config.Address<br />
+                <strong>Email:</strong> <a href="mailto:@config.SupportEmail">@config.SupportEmail</a><br />
+                <strong>Phone:</strong> @config.SupportPhone (@config.BusinessHours)
+            </p>
+        </div>
+
+        <p>We aim to acknowledge grievances within 48 hours and resolve them within a reasonable time as required
+        under applicable law.</p>
+    }
+</div>
+
+@code {
+    private SiteConfig? config;
+    private string introHtml = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        config = await SiteConfigSvc.GetAsync();
+        var intro = await ContentRepo.GetPageAsync("contact-intro");
+        var markdown = intro?.Markdown
+            ?? SeedContent.DefaultPages.FirstOrDefault(p => p.Slug == "contact-intro").Markdown
+            ?? "";
+        introHtml = SiteConfigSvc.RenderMarkdown(markdown, config);
+    }
+}

@@ -1,0 +1,49 @@
+@inherits LayoutComponentBase
+@using InventoryManagement.Web.Services
+@using InventoryManagement.Web.Theming
+@inject SiteConfigService SiteConfigSvc
+
+@* Inline (not HeadContent) so the theme applies in BOTH static-SSR and InteractiveServer pages. *@
+@if (!string.IsNullOrEmpty(themeCss))
+{
+    <style>@((MarkupString)themeCss)</style>
+}
+
+<div class="public-page @(config?.Template == "showroom" ? "template-showroom" : "template-classic")">
+    <header class="public-header">
+        <div class="public-header-inner">
+            <a class="public-brand" href="/">
+                @if (config is not null && !string.IsNullOrWhiteSpace(config.LogoUrl))
+                {
+                    <img src="@config.LogoUrl" alt="@config.BrandName" class="public-logo" />
+                }
+                else
+                {
+                    <span>🔧 @(config?.BrandName ?? "AutoNex")</span>
+                }
+            </a>
+            <nav class="public-nav">
+                <a href="/">Browse Parts</a>
+                <a href="/contact">Contact</a>
+                <a href="/account/login" class="public-login-btn">Dealer Login</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="public-main">
+        @Body
+    </main>
+
+    <Footer />
+</div>
+
+@code {
+    private SiteConfig? config;
+    private string themeCss = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        config = await SiteConfigSvc.GetAsync();
+        themeCss = ThemeCatalog.ToCss(ThemeCatalog.Get(config.Theme));
+    }
+}

@@ -1,0 +1,8 @@
+<Project>
+  <!-- Applies to every project in the solution -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <!-- Lean production output: no debug symbols anywhere -->
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+</Project>

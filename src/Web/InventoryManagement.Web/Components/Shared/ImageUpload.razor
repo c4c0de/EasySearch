@@ -1,0 +1,146 @@
+@using InventoryManagement.Application.Interfaces
+@inject IStorageService Storage
+
+<div class="image-upload-wrapper">
+    <div class="upload-mode-tabs">
+        <button type="button" class="upload-tab @(mode == UploadMode.File ? "active" : "")" @onclick="() => SetMode(UploadMode.File)">Upload File</button>
+        <button type="button" class="upload-tab @(mode == UploadMode.Url ? "active" : "")" @onclick="() => SetMode(UploadMode.Url)">Image URL</button>
+    </div>
+
+    @if (mode == UploadMode.File)
+    {
+        <div class="upload-zone @(isDragging ? "dragging" : "")"
+             @ondragenter="() => isDragging = true"
+             @ondragleave="() => isDragging = false"
+             @ondrop="() => isDragging = false">
+
+            <InputFile OnChange="HandleFile" accept="image/*" class="file-input" />
+            <div class="upload-label">
+                @if (uploading)
+                {
+                    <span>Uploading...</span>
+                }
+                else
+                {
+                    <span>Drag & drop or <u>browse</u> (max 3 MB)</span>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="url-upload-zone">
+            <input type="url" class="filter-input url-input" placeholder="https://example.com/image.jpg"
+                   value="@imageUrlInput" @oninput="OnUrlInput" />
+            <p class="muted-hint small-hint">
+                Paste any hosted image URL (Cloudinary, Imgur, CDN). Note: Google Photos share links expire after 60 min.
+            </p>
+            @if (!string.IsNullOrWhiteSpace(imageUrlInput))
+            {
+                <div class="url-preview-box">
+                    @if (urlLoadFailed)
+                    {
+                        <div class="url-preview-error">⚠️ Couldn't load image from this URL. Check the link or CORS policy.</div>
+                    }
+                    else
+                    {
+                        <img src="@imageUrlInput" alt="Live preview" class="url-preview-img" @onerror="OnPreviewError" @onload="OnPreviewLoad" />
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMsg))
+    {
+        <p class="upload-error">@errorMsg</p>
+    }
+</div>
+
+@code {
+    [Parameter] public EventCallback<string> OnUploaded { get; set; }
+
+    private enum UploadMode { File, Url }
+    private UploadMode mode = UploadMode.File;
+
+    private bool isDragging;
+    private bool uploading;
+    private string? errorMsg;
+    private string imageUrlInput = "";
+    private bool urlLoadFailed;
+
+    private const long MaxBytes = 3 * 1024 * 1024;
+    private static readonly string[] AllowedExtensions = [".jpg", ".jpeg", ".png", ".webp"];
+
+    private void SetMode(UploadMode m)
+    {
+        mode = m;
+        errorMsg = null;
+    }
+
+    private async Task OnUrlInput(ChangeEventArgs e)
+    {
+        errorMsg = null;
+        urlLoadFailed = false;
+        imageUrlInput = e.Value?.ToString()?.Trim() ?? "";
+
+        if (string.IsNullOrWhiteSpace(imageUrlInput))
+        {
+            await OnUploaded.InvokeAsync("");
+            return;
+        }
+
+        if (!Uri.TryCreate(imageUrlInput, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            errorMsg = "Please enter a valid http:// or https:// image URL.";
+            return;
+        }
+
+        await OnUploaded.InvokeAsync(imageUrlInput);
+    }
+
+    private void OnPreviewError()
+    {
+        urlLoadFailed = true;
+    }
+
+    private void OnPreviewLoad()
+    {
+        urlLoadFailed = false;
+    }
+
+    private async Task HandleFile(InputFileChangeEventArgs e)
+    {
+        errorMsg = null;
+        var file = e.File;
+
+        if (file.Size > MaxBytes)
+        {
+            errorMsg = "File exceeds 3 MB limit.";
+            return;
+        }
+
+        var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+        if (!AllowedExtensions.Contains(ext) || !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            errorMsg = "Only JPG, PNG, or WebP images are allowed.";
+            return;
+        }
+
+        uploading = true;
+        try
+        {
+            await using var stream = file.OpenReadStream(MaxBytes);
+            var url = await Storage.UploadAsync(stream, file.Name, file.ContentType);
+            await OnUploaded.InvokeAsync(url);
+        }
+        catch (Exception ex)
+        {
+            errorMsg = $"Upload failed: {ex.Message}";
+        }
+        finally
+        {
+            uploading = false;
+        }
+    }
+}

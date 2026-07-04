@@ -1,0 +1,166 @@
+@page "/vehicles"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using InventoryManagement.Application.DTOs
+@using InventoryManagement.Application.Interfaces
+@using InventoryManagement.Domain.Entities
+@inject IInventoryRepository InventoryRepo
+@inject NavigationManager Nav
+
+<PageTitle>Vehicles</PageTitle>
+
+<div class="form-page">
+    <div class="toolbar">
+        <h2 class="page-title">Vehicles</h2>
+        <button class="btn-primary" @onclick="() => { showForm = true; ResetForm(); }">+ Add Vehicle</button>
+    </div>
+
+    <p class="muted-hint">Add each car make and year here. Parts you add later will be linked to a vehicle.</p>
+
+    @if (showForm)
+    {
+        <div class="card form-card">
+            <h3>@(editingId.HasValue ? "Edit Vehicle" : "Add Vehicle")</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Car Make / Name</label>
+                    <input class="filter-input" @bind="newMake" placeholder="e.g. Maruti Swift, Honda City, Maruti Baleno" />
+                </div>
+                <div class="form-group">
+                    <label>Year <small>(optional)</small></label>
+                    <input type="number" class="filter-input" @bind="newYear" placeholder="e.g. 2024" min="1990" max="2030" />
+                </div>
+                <div class="form-group">
+                    <label>Notes <small>(optional)</small></label>
+                    <input class="filter-input" @bind="newNotes" placeholder="e.g. Petrol, Diesel, ZXi variant" />
+                </div>
+            </div>
+            <div class="form-actions">
+                <button class="btn-primary" @onclick="Save" disabled="@(string.IsNullOrWhiteSpace(newMake))">
+                    @(editingId.HasValue ? "Update" : "Add")
+                </button>
+                <button class="btn-secondary" @onclick="Cancel">Cancel</button>
+            </div>
+        </div>
+    }
+
+    @if (vehicles.Count == 0)
+    {
+        <div class="empty-state">No vehicles yet. Add your first car above.</div>
+    }
+    else
+    {
+        <div class="catalog-table-wrapper">
+            <table class="catalog-table">
+                <thead>
+                    <tr>
+                        <th>Make / Model</th>
+                        <th>Year</th>
+                        <th>Notes</th>
+                        <th>Parts</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var v in vehicles)
+                    {
+                        <tr>
+                            <td><strong>@v.Make</strong></td>
+                            <td>@(v.Year?.ToString() ?? "—")</td>
+                            <td class="text-muted">@(v.Notes ?? "—")</td>
+                            <td>
+                                <a href="/parts/create?vehicleId=@v.Id" class="btn-sm-primary">@v.PartCount parts →</a>
+                            </td>
+                            <td>
+                                @if (confirmingId == v.Id)
+                                {
+                                    <div class="delete-confirm">
+                                        @if (v.PartCount > 0)
+                                        {
+                                            <p class="delete-warning">⚠️ This vehicle has @v.PartCount part@(v.PartCount == 1 ? "" : "s"). Deleting keeps the parts but removes their car tag.</p>
+                                        }
+                                        else
+                                        {
+                                            <p class="delete-warning">Delete this vehicle?</p>
+                                        }
+                                        <button class="btn-sm-danger" @onclick="() => Delete(v.Id)">Delete anyway</button>
+                                        <button class="btn-secondary btn-sm" @onclick="() => confirmingId = null">Cancel</button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <button class="btn-sm-primary" @onclick="() => StartEdit(v)">Edit</button>
+                                    <button class="btn-sm-danger" @onclick="() => confirmingId = v.Id">Delete</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private static Guid DefaultDealerId => AppConstants.DefaultDealerId;
+
+    private List<VehicleDto> vehicles = new();
+    private bool showForm;
+    private Guid? editingId;
+    private Guid? confirmingId;
+    private string newMake = "";
+    private int? newYear;
+    private string? newNotes;
+
+    protected override async Task OnInitializedAsync()
+        => vehicles = await InventoryRepo.GetVehiclesAsync(DefaultDealerId);
+
+    private void ResetForm() { newMake = ""; newYear = null; newNotes = null; editingId = null; }
+
+    private void StartEdit(VehicleDto v)
+    {
+        editingId = v.Id;
+        newMake = v.Make;
+        newYear = v.Year;
+        newNotes = v.Notes;
+        showForm = true;
+    }
+
+    private void Cancel() { showForm = false; ResetForm(); }
+
+    private async Task Save()
+    {
+        if (editingId.HasValue)
+        {
+            var entity = await InventoryRepo.GetVehicleByIdAsync(editingId.Value);
+            if (entity is not null)
+            {
+                entity.Make = newMake.Trim();
+                entity.Year = newYear;
+                entity.Notes = string.IsNullOrWhiteSpace(newNotes) ? null : newNotes.Trim();
+                await InventoryRepo.UpdateVehicleAsync(entity);
+            }
+        }
+        else
+        {
+            await InventoryRepo.CreateVehicleAsync(new Vehicle
+            {
+                Id = Guid.NewGuid(),
+                DealerId = DefaultDealerId,
+                Make = newMake.Trim(),
+                Year = newYear,
+                Notes = string.IsNullOrWhiteSpace(newNotes) ? null : newNotes.Trim()
+            });
+        }
+
+        vehicles = await InventoryRepo.GetVehiclesAsync(DefaultDealerId);
+        Cancel();
+    }
+
+    private async Task Delete(Guid id)
+    {
+        await InventoryRepo.DeleteVehicleAsync(id);
+        confirmingId = null;
+        vehicles = await InventoryRepo.GetVehiclesAsync(DefaultDealerId);
+    }
+}

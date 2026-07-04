@@ -1,0 +1,110 @@
+@inherits CatalogBase
+@using InventoryManagement.Application.DTOs
+@using InventoryManagement.Domain.Enums
+
+<div class="inventory-layout">
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h3 class="sidebar-title">Find a part</h3>
+            <button class="sidebar-toggle-btn" onclick="toggleSidebar()" type="button" aria-label="Toggle filters">
+                <span class="show-text">Filter ⚙️</span>
+                <span class="hide-text">Close ✕</span>
+            </button>
+        </div>
+
+        <div class="sidebar-content">
+            <div class="filter-group">
+                <label>Search</label>
+                <input type="text" class="filter-input" placeholder="Car name, part type..."
+                       value="@filter.SearchTerm" @oninput="OnSearchInput" />
+            </div>
+
+            <div class="filter-group">
+                <label>Car Make</label>
+                <input type="text" class="filter-input" list="classic-makes" placeholder="e.g. Swift, Honda City"
+                       value="@filter.VehicleMake" @oninput="OnMakeInput" />
+                <datalist id="classic-makes">
+                    @foreach (var m in makes)
+                    {
+                        <option value="@m" />
+                    }
+                </datalist>
+            </div>
+
+            <div class="filter-group">
+                <label>Year</label>
+                <input type="number" class="filter-input" placeholder="e.g. 2024"
+                       value="@(filter.Year?.ToString() ?? "")"
+                       @onchange="OnYearChange" min="1990" max="2030" />
+                @if (filter.Year.HasValue)
+                {
+                    <button class="clear-btn" @onclick="() => { filter.Year = null; _ = LoadListings(); }">Clear</button>
+                }
+            </div>
+
+            <div class="filter-group">
+                <label>Part Type</label>
+                <CategoryTree Categories="categories" SelectedId="filter.CategoryId" OnSelected="OnCategorySelected" />
+                @if (filter.CategoryId.HasValue)
+                {
+                    <button class="clear-btn" style="margin-top:4px" @onclick="() => { filter.CategoryId = null; _ = LoadListings(); }">Clear</button>
+                }
+            </div>
+
+            <div class="filter-group">
+                <label>Price Range (₹)</label>
+                <div class="price-range">
+                    <input type="number" class="filter-input" placeholder="Min" @bind="filter.MinPrice" @bind:after="() => _ = LoadListings()" />
+                    <span>–</span>
+                    <input type="number" class="filter-input" placeholder="Max" @bind="filter.MaxPrice" @bind:after="() => _ = LoadListings()" />
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label>Availability</label>
+                <select class="filter-input" @bind="StatusFilter" @bind:after="() => _ = LoadListings()">
+                    <option value="">All</option>
+                    @foreach (var s in Enum.GetValues<ListingStatus>())
+                    {
+                        <option value="@s">@s</option>
+                    }
+                </select>
+            </div>
+        </div>
+    </aside>
+
+    <main class="inventory-main">
+        <div class="toolbar">
+            <h2 class="page-title">Browse Parts</h2>
+            <select class="filter-input sort-select" @bind="filter.SortBy" @bind:after="() => _ = LoadListings()">
+                <option value="CreatedAt">Sort: Newest</option>
+                <option value="Price">Sort: Price</option>
+                <option value="Make">Sort: Car</option>
+            </select>
+        </div>
+
+        @if (loading)
+        {
+            <div class="loading-spinner">Loading…</div>
+        }
+        else if (result is null || result.Items.Count == 0)
+        {
+            <div class="empty-state">No parts match your search. Try clearing some filters.</div>
+        }
+        else
+        {
+            <div class="listing-grid">
+                @foreach (var item in result.Items)
+                {
+                    <PublicListingCard Listing="item" />
+                }
+            </div>
+
+            <div class="pagination">
+                <button class="btn-secondary" disabled="@(!result.HasPreviousPage)" @onclick="PrevPage">← Prev</button>
+                <span>Page @result.PageNumber of @result.TotalPages (@result.TotalCount parts)</span>
+                <button class="btn-secondary" disabled="@(!result.HasNextPage)" @onclick="NextPage">Next →</button>
+            </div>
+        }
+    </main>
+</div>

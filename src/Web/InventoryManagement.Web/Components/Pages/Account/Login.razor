@@ -1,0 +1,98 @@
+@page "/account/login"
+@layout PublicLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@inject IOptions<DealerAuth> AuthOpt
+@inject NavigationManager Nav
+
+<PageTitle>Dealer Login</PageTitle>
+
+<div class="login-page">
+    <div class="login-card">
+        <h1>Dealer Login</h1>
+        <p class="muted-hint">Sign in to manage your inventory.</p>
+
+        <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
+            <div class="form-group">
+                <label>Username</label>
+                <InputText class="filter-input" @bind-Value="Input.Username" autocomplete="username" />
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <InputText type="password" class="filter-input" @bind-Value="Input.Password" autocomplete="current-password" />
+            </div>
+
+            @if (!string.IsNullOrEmpty(error))
+            {
+                <p class="upload-error">@error</p>
+            }
+
+            <button type="submit" class="btn-primary" style="width:100%;margin-top:8px">Sign in</button>
+        </EditForm>
+
+        <p class="login-back"><a href="/">← Back to catalogue</a></p>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [SupplyParameterFromForm] private LoginInput Input { get; set; } = new();
+    [SupplyParameterFromQuery(Name = "returnUrl")] private string? ReturnUrl { get; set; }
+
+    private string? error;
+
+    // Simple in-memory brute-force damping (single server): 5 straight failures → 5-minute lockout.
+    private static int failedAttempts;
+    private static DateTime lockoutUntil = DateTime.MinValue;
+
+    private async Task LoginUser()
+    {
+        if (DateTime.UtcNow < lockoutUntil)
+        {
+            error = "Too many failed attempts. Try again in a few minutes.";
+            return;
+        }
+
+        var cfg = AuthOpt.Value;
+        var passwordOk = !string.IsNullOrWhiteSpace(cfg.PasswordHash)
+            ? PasswordHasher.Verify(Input.Password, cfg.PasswordHash)
+            : string.Equals(Input.Password, cfg.Password, StringComparison.Ordinal);
+
+        if (!string.Equals(Input.Username, cfg.Username, StringComparison.Ordinal) || !passwordOk)
+        {
+            await Task.Delay(1500); // constant cost per failed attempt
+            if (++failedAttempts >= 5)
+            {
+                lockoutUntil = DateTime.UtcNow.AddMinutes(5);
+                failedAttempts = 0;
+                error = "Too many failed attempts. Try again in a few minutes.";
+            }
+            else
+            {
+                error = "Invalid username or password.";
+            }
+            return;
+        }
+
+        failedAttempts = 0;
+
+        var claims = new[]
+        {
+            new Claim(ClaimTypes.Name, cfg.Username),
+            new Claim(ClaimTypes.Role, "Dealer")
+        };
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
+
+        // Only allow local return URLs (guard against open redirects).
+        var target = (!string.IsNullOrWhiteSpace(ReturnUrl) && ReturnUrl.StartsWith('/')) ? ReturnUrl : "/dashboard";
+        Nav.NavigateTo(target);
+    }
+
+    private sealed class LoginInput
+    {
+        public string Username { get; set; } = "";
+        public string Password { get; set; } = "";
+    }
+}

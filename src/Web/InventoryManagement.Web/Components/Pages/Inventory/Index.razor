@@ -1,0 +1,184 @@
+@page "/inventory"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@implements IDisposable
+@using InventoryManagement.Application.DTOs
+@using InventoryManagement.Application.Interfaces
+@using InventoryManagement.Domain.Enums
+@inject IInventoryRepository InventoryRepo
+@inject ICategoryRepository CategoryRepo
+
+<PageTitle>Parts Inventory</PageTitle>
+
+<div class="inventory-layout">
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h3 class="sidebar-title">Filters</h3>
+            <button class="sidebar-toggle-btn" onclick="toggleSidebar()" type="button" aria-label="Toggle filters">
+                <span class="show-text">Filter ⚙️</span>
+                <span class="hide-text">Close ✕</span>
+            </button>
+        </div>
+
+        <div class="sidebar-content">
+            <div class="filter-group">
+                <label>Search</label>
+                <input type="text" class="filter-input" placeholder="Car name, part type, notes..."
+                       value="@filter.SearchTerm" @oninput="OnSearchInput" />
+            </div>
+
+            <div class="filter-group">
+                <label>Car Make</label>
+                <input type="text" class="filter-input" list="admin-makes" placeholder="e.g. Swift, Honda City"
+                       value="@filter.VehicleMake" @oninput="OnMakeInput" />
+                <datalist id="admin-makes">
+                    @foreach (var m in makes)
+                    {
+                        <option value="@m" />
+                    }
+                </datalist>
+            </div>
+
+            <div class="filter-group">
+                <label>Year</label>
+                <input type="number" class="filter-input" placeholder="e.g. 2024"
+                       value="@(filter.Year?.ToString() ?? "")"
+                       @onchange="OnYearChange" min="1990" max="2030" />
+                @if (filter.Year.HasValue)
+                {
+                    <button class="clear-btn" @onclick="() => { filter.Year = null; _ = LoadListings(); }">Clear</button>
+                }
+            </div>
+
+            <div class="filter-group">
+                <label>Part Type</label>
+                <CategoryTree Categories="categories" SelectedId="filter.CategoryId"
+                              OnSelected="OnCategorySelected" />
+                @if (filter.CategoryId.HasValue)
+                {
+                    <button class="clear-btn" style="margin-top:4px" @onclick="() => { filter.CategoryId = null; _ = LoadListings(); }">Clear</button>
+                }
+            </div>
+
+            <div class="filter-group">
+                <label>Price Range (₹)</label>
+                <div class="price-range">
+                    <input type="number" class="filter-input" placeholder="Min"
+                           @bind="filter.MinPrice" @bind:after="() => _ = LoadListings()" />
+                    <span>–</span>
+                    <input type="number" class="filter-input" placeholder="Max"
+                           @bind="filter.MaxPrice" @bind:after="() => _ = LoadListings()" />
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label>Status</label>
+                <select class="filter-input" @bind="StatusFilter" @bind:after="() => _ = LoadListings()">
+                    <option value="">All</option>
+                    @foreach (var s in Enum.GetValues<ListingStatus>())
+                    {
+                        <option value="@s">@s</option>
+                    }
+                </select>
+            </div>
+        </div>
+    </aside>
+
+    <main class="inventory-main">
+        <div class="toolbar">
+            <h2 class="page-title">Parts Inventory</h2>
+            <div class="toolbar-actions">
+                <select class="filter-input sort-select" @bind="filter.SortBy" @bind:after="() => _ = LoadListings()">
+                    <option value="CreatedAt">Sort: Newest</option>
+                    <option value="Price">Sort: Price</option>
+                    <option value="Make">Sort: Car</option>
+                </select>
+                <a href="/parts/create" class="btn-primary">+ Add Part</a>
+            </div>
+        </div>
+
+        @if (loading)
+        {
+            <div class="loading-spinner">Loading...</div>
+        }
+        else if (result is null || result.Items.Count == 0)
+        {
+            <div class="empty-state">No parts match the current filters.</div>
+        }
+        else
+        {
+            <div class="listing-grid">
+                @foreach (var item in result.Items)
+                {
+                    <ListingCard Listing="item" OnChanged="LoadListings" />
+                }
+            </div>
+
+            <div class="pagination">
+                <button class="btn-secondary" disabled="@(!result.HasPreviousPage)" @onclick="PrevPage">← Prev</button>
+                <span>Page @result.PageNumber of @result.TotalPages (@result.TotalCount parts)</span>
+                <button class="btn-secondary" disabled="@(!result.HasNextPage)" @onclick="NextPage">Next →</button>
+            </div>
+        }
+    </main>
+</div>
+
+@code {
+    private static Guid DefaultDealerId => AppConstants.DefaultDealerId;
+
+    private InventoryFilterQuery filter = new() { DealerId = DefaultDealerId };
+    private InventoryManagement.Application.Common.PagedList<InventoryListingDto>? result;
+    private List<InventoryManagement.Application.DTOs.CategoryDto> categories = new();
+    private List<string> makes = new();
+    private bool loading = true;
+
+    private System.Threading.Timer? debounceTimer;
+
+    private string StatusFilter
+    {
+        get => filter.Status?.ToString() ?? "";
+        set => filter.Status = Enum.TryParse<ListingStatus>(value, out var s) ? s : null;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        categories = await CategoryRepo.GetCategoryTreeAsync();
+        makes = await InventoryRepo.GetDistinctMakesAsync(DefaultDealerId);
+        await LoadListings();
+    }
+
+    private void Debounce(Action action)
+    {
+        debounceTimer?.Dispose();
+        debounceTimer = new System.Threading.Timer(_ =>
+            InvokeAsync(async () => { action(); await LoadListings(); StateHasChanged(); }), null, 300, Timeout.Infinite);
+    }
+
+    private void OnSearchInput(ChangeEventArgs e) => Debounce(() => filter.SearchTerm = e.Value?.ToString());
+    private void OnMakeInput(ChangeEventArgs e) => Debounce(() => filter.VehicleMake = e.Value?.ToString());
+
+    private async Task OnYearChange(ChangeEventArgs e)
+    {
+        filter.Year = int.TryParse(e.Value?.ToString(), out var y) ? y : null;
+        await LoadListings();
+    }
+
+    private async Task OnCategorySelected(Guid? id)
+    {
+        filter.CategoryId = id;
+        filter.PageNumber = 1;
+        await LoadListings();
+    }
+
+    private async Task LoadListings()
+    {
+        loading = true;
+        result = await InventoryRepo.GetFilteredListingsAsync(filter);
+        loading = false;
+    }
+
+    private async Task PrevPage() { filter.PageNumber--; await LoadListings(); }
+    private async Task NextPage() { filter.PageNumber++; await LoadListings(); }
+
+    public void Dispose() => debounceTimer?.Dispose();
+}

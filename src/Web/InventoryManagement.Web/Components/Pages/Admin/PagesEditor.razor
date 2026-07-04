@@ -1,0 +1,138 @@
+@page "/pages"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using InventoryManagement.Application.DTOs
+@using InventoryManagement.Application.Interfaces
+@using InventoryManagement.Web.Services
+@inject ISiteContentRepository ContentRepo
+@inject SiteConfigService SiteConfigSvc
+
+<PageTitle>Edit Pages</PageTitle>
+
+<div class="form-page">
+    <h2 class="page-title">Website Pages</h2>
+    <p class="muted-hint">Edit the text of your policy pages. Use Markdown for formatting (## heading, **bold**, - lists, [link](/url)) and tokens that auto-fill from <a href="/settings">Site Settings</a>.</p>
+
+    @if (editing is null)
+    {
+        <div class="catalog-table-wrapper">
+            <table class="catalog-table">
+                <thead><tr><th>Page</th><th>URL</th><th>Last updated</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var p in pages)
+                    {
+                        <tr>
+                            <td><strong>@p.Title</strong></td>
+                            <td class="text-muted">@(p.Slug == "contact-intro" ? "/contact (intro text)" : "/" + p.Slug)</td>
+                            <td class="text-muted">@p.UpdatedAt.ToString("dd MMM yyyy")</td>
+                            <td><button class="btn-sm-primary" @onclick="() => StartEdit(p)">Edit</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="card form-card">
+            <div class="toolbar">
+                <h3>Editing: @editing.Title</h3>
+                <button class="btn-secondary btn-sm" @onclick="() => showPreview = !showPreview">
+                    @(showPreview ? "✏️ Edit" : "👁 Preview")
+                </button>
+            </div>
+
+            <div class="form-group">
+                <label>Page Title</label>
+                <input class="filter-input" @bind="editTitle" />
+            </div>
+
+            @if (showPreview)
+            {
+                <div class="legal-page markdown-preview">
+                    @((MarkupString)previewHtml)
+                </div>
+            }
+            else
+            {
+                <div class="form-group">
+                    <label>Content (Markdown)</label>
+                    <textarea class="filter-input markdown-editor" @bind="editMarkdown" rows="24"></textarea>
+                </div>
+                <details class="token-help">
+                    <summary>Available tokens (auto-filled from Site Settings)</summary>
+                    <code>
+                        @foreach (var t in tokenList)
+                        {
+                            <span class="token-chip">{{@t}}</span>
+                        }
+                    </code>
+                </details>
+            }
+
+            @if (saved) { <p class="save-confirm">✓ Saved.</p> }
+
+            <div class="form-actions">
+                <button class="btn-primary" @onclick="Save" disabled="@saving">@(saving ? "Saving…" : "Save Page")</button>
+                <button class="btn-secondary" @onclick="() => editing = null">Back to list</button>
+                @if (editing.Slug != "contact-intro")
+                {
+                    <a href="/@editing.Slug" target="_blank" class="btn-secondary">View live ↗</a>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<ContentPageDto> pages = new();
+    private ContentPageDto? editing;
+    private string editTitle = "";
+    private string editMarkdown = "";
+    private bool showPreview;
+    private string previewHtml = "";
+    private bool saving;
+    private bool saved;
+
+    private static readonly string[] tokenList =
+    [
+        SettingKeys.BrandName, SettingKeys.LegalName, SettingKeys.SupportEmail, SettingKeys.SupportPhone,
+        SettingKeys.BusinessHours, SettingKeys.GrievanceOfficerName, SettingKeys.RefundWindowDays,
+        SettingKeys.ProcessingTimeText, SettingKeys.Jurisdiction, SettingKeys.UdyamRegistrationNumber,
+        SettingKeys.WebsiteUrl, SettingKeys.LastUpdated, "Address"
+    ];
+
+    protected override async Task OnInitializedAsync() => pages = await ContentRepo.GetPagesAsync();
+
+    private void StartEdit(ContentPageDto p)
+    {
+        editing = p;
+        editTitle = p.Title;
+        editMarkdown = p.Markdown;
+        showPreview = false;
+        saved = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Rebuild the preview HTML when toggled on.
+        if (showPreview && previewMarkdownRendered != editMarkdown)
+        {
+            var config = await SiteConfigSvc.GetAsync();
+            previewHtml = SiteConfigSvc.RenderMarkdown(editMarkdown, config);
+            previewMarkdownRendered = editMarkdown;
+            StateHasChanged();
+        }
+    }
+    private string? previewMarkdownRendered;
+
+    private async Task Save()
+    {
+        if (editing is null) return;
+        saving = true; saved = false;
+        await ContentRepo.SavePageAsync(editing.Slug, editTitle.Trim(), editMarkdown);
+        SiteConfigSvc.Invalidate();
+        pages = await ContentRepo.GetPagesAsync();
+        saving = false; saved = true;
+    }
+}

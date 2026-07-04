@@ -1,0 +1,199 @@
+@page "/settings"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using InventoryManagement.Application.Interfaces
+@using InventoryManagement.Web.Services
+@using InventoryManagement.Web.Theming
+@inject ISiteContentRepository ContentRepo
+@inject SiteConfigService SiteConfigSvc
+@inject IStorageService Storage
+
+<PageTitle>Site Settings</PageTitle>
+
+<div class="form-page">
+    <h2 class="page-title">Site Settings</h2>
+    <p class="muted-hint">Branding, business details, and the public site theme. These values feed the header, footer, contact page, and the {{tokens}} inside policy pages.</p>
+
+    <div class="card form-card" style="margin-bottom:18px">
+        <h3>Branding</h3>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Brand Name (shown in header/footer)</label>
+                <input class="filter-input" @bind="values[SettingKeys.BrandName]" />
+            </div>
+            <div class="form-group">
+                <label>Legal / Registered Name</label>
+                <input class="filter-input" @bind="values[SettingKeys.LegalName]" />
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Logo <small>(optional — replaces the brand text in the public header)</small></label>
+            @if (!string.IsNullOrWhiteSpace(values[SettingKeys.LogoUrl]))
+            {
+                <div class="logo-preview-row">
+                    <img src="@values[SettingKeys.LogoUrl]" alt="Logo" class="logo-preview" />
+                    <button class="btn-sm-danger" @onclick="RemoveLogo">Remove</button>
+                </div>
+            }
+            <ImageUpload OnUploaded="OnLogoUploaded" />
+        </div>
+    </div>
+
+    <div class="card form-card" style="margin-bottom:18px">
+        <h3>Layout Template</h3>
+        <p class="muted-hint">Choose how the catalog layout and card design are presented to public visitors.</p>
+        <div class="template-grid">
+            @foreach (var t in TemplateCatalog.Presets)
+            {
+                <button type="button" class="template-card @(values[SettingKeys.Template] == t.Key ? "template-selected" : "")"
+                        @onclick="() => values[SettingKeys.Template] = t.Key">
+                    <div class="template-wireframe template-wireframe-@t.Key">
+                        @if (t.Key == "classic")
+                        {
+                            <div class="wf-sidebar"></div>
+                            <div class="wf-main">
+                                <div class="wf-card"></div>
+                                <div class="wf-card"></div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="wf-hero"></div>
+                            <div class="wf-chips"></div>
+                            <div class="wf-showroom-cards">
+                                <div class="wf-large-card"></div>
+                                <div class="wf-large-card"></div>
+                            </div>
+                        }
+                    </div>
+                    <strong>@t.Name</strong>
+                    <small>@t.Description</small>
+                </button>
+            }
+        </div>
+    </div>
+
+    <div class="card form-card" style="margin-bottom:18px">
+        <h3>Public Theme</h3>
+        <p class="muted-hint">Applies to the customer-facing site only — the admin panel keeps this look.</p>
+        <div class="theme-grid">
+            @foreach (var t in ThemeCatalog.Presets)
+            {
+                <button type="button" class="theme-card @(values[SettingKeys.Theme] == t.Key ? "theme-selected" : "")"
+                        @onclick="() => values[SettingKeys.Theme] = t.Key">
+                    <span class="theme-swatches">
+                        <span class="swatch" style="background:@t.SwatchBg"></span>
+                        <span class="swatch" style="background:@t.SwatchSurface"></span>
+                        <span class="swatch" style="background:@t.SwatchPrimary"></span>
+                    </span>
+                    <strong>@t.Name</strong>
+                    <small>@t.Description</small>
+                </button>
+            }
+        </div>
+    </div>
+
+    <div class="card form-card" style="margin-bottom:18px">
+        <h3>Contact & Legal Details</h3>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Support Email</label>
+                <input class="filter-input" @bind="values[SettingKeys.SupportEmail]" />
+            </div>
+            <div class="form-group">
+                <label>Support Phone</label>
+                <input class="filter-input" @bind="values[SettingKeys.SupportPhone]" />
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Business Hours</label>
+                <input class="filter-input" @bind="values[SettingKeys.BusinessHours]" />
+            </div>
+            <div class="form-group">
+                <label>Grievance Officer Name</label>
+                <input class="filter-input" @bind="values[SettingKeys.GrievanceOfficerName]" />
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Refund Window (days)</label>
+                <input type="number" class="filter-input" @bind="values[SettingKeys.RefundWindowDays]" min="1" max="60" />
+            </div>
+            <div class="form-group">
+                <label>Order Processing Time (text)</label>
+                <input class="filter-input" @bind="values[SettingKeys.ProcessingTimeText]" placeholder="e.g. 2-4 business days" />
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Jurisdiction (city, state)</label>
+                <input class="filter-input" @bind="values[SettingKeys.Jurisdiction]" />
+            </div>
+            <div class="form-group">
+                <label>Udyam Registration No. <small>(optional)</small></label>
+                <input class="filter-input" @bind="values[SettingKeys.UdyamRegistrationNumber]" />
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Website URL</label>
+                <input class="filter-input" @bind="values[SettingKeys.WebsiteUrl]" />
+            </div>
+            <div class="form-group">
+                <label>Policies "Last updated" text</label>
+                <input class="filter-input" @bind="values[SettingKeys.LastUpdated]" placeholder="e.g. June 2026" />
+            </div>
+        </div>
+        <p class="muted-hint">The main address is managed under <a href="/branches">Branches</a> — the Primary branch's address is used in the footer and policy pages.</p>
+    </div>
+
+    @if (saved) { <p class="save-confirm">✓ Saved. Public site updated.</p> }
+
+    <div class="form-actions">
+        <button class="btn-primary" @onclick="Save" disabled="@saving">@(saving ? "Saving…" : "Save Settings")</button>
+        <a href="/" target="_blank" class="btn-secondary">Preview public site ↗</a>
+    </div>
+</div>
+
+@code {
+    private Dictionary<string, string> values = SettingKeys.All.ToDictionary(k => k, _ => "");
+    private bool saving;
+    private bool saved;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var config = await SiteConfigSvc.GetAsync();
+        foreach (var key in SettingKeys.All)
+            values[key] = config.Get(key);
+        if (string.IsNullOrWhiteSpace(values[SettingKeys.Theme]))
+            values[SettingKeys.Theme] = ThemeCatalog.DefaultKey;
+        if (string.IsNullOrWhiteSpace(values[SettingKeys.Template]))
+            values[SettingKeys.Template] = TemplateCatalog.DefaultKey;
+    }
+
+    private async Task OnLogoUploaded(string url)
+    {
+        var old = values[SettingKeys.LogoUrl];
+        values[SettingKeys.LogoUrl] = url;
+        if (!string.IsNullOrWhiteSpace(old) && old != url)
+            await Storage.DeleteAsync(old);
+    }
+
+    private async Task RemoveLogo()
+    {
+        var old = values[SettingKeys.LogoUrl];
+        values[SettingKeys.LogoUrl] = "";
+        if (!string.IsNullOrWhiteSpace(old))
+            await Storage.DeleteAsync(old);
+    }
+
+    private async Task Save()
+    {
+        saving = true; saved = false;
+        await ContentRepo.SaveSettingsAsync(values);
+        SiteConfigSvc.Invalidate();
+        saving = false; saved = true;
+    }
+}

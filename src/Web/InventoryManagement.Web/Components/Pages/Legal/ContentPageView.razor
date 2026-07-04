@@ -1,0 +1,47 @@
+@page "/terms"
+@page "/privacy"
+@page "/refund"
+@page "/shipping"
+@page "/pricing"
+@layout PublicLayout
+@using InventoryManagement.Application.Interfaces
+@using InventoryManagement.Web.Services
+@inject ISiteContentRepository ContentRepo
+@inject SiteConfigService SiteConfigSvc
+@inject NavigationManager Nav
+
+<PageTitle>@title — @brandName</PageTitle>
+
+<div class="legal-page">
+    <h1>@title</h1>
+    <p class="legal-updated">Last updated: @lastUpdated</p>
+    @((MarkupString)html)
+</div>
+
+@code {
+    private string title = "";
+    private string html = "";
+    private string brandName = "";
+    private string lastUpdated = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var slug = new Uri(Nav.Uri).AbsolutePath.Trim('/').ToLowerInvariant();
+        var config = await SiteConfigSvc.GetAsync();
+        brandName = config.BrandName;
+        lastUpdated = config.LastUpdated;
+
+        var page = await ContentRepo.GetPageAsync(slug);
+        if (page is null)
+        {
+            // Fallback to the built-in template — a missing row can never blank a live policy URL.
+            var seed = SeedContent.DefaultPages.FirstOrDefault(p => p.Slug == slug);
+            title = seed.Title ?? "Page";
+            html = SiteConfigSvc.RenderMarkdown(seed.Markdown ?? "", config);
+            return;
+        }
+
+        title = page.Title;
+        html = SiteConfigSvc.RenderMarkdown(page.Markdown, config);
+    }
+}

@@ -1,0 +1,28 @@
+@page "/"
+@layout PublicLayout
+@rendermode InteractiveServer
+@using InventoryManagement.Web.Services
+@inject SiteConfigService SiteConfigSvc
+
+<PageTitle>Browse Parts — @(config?.BrandName ?? "AutoNex")</PageTitle>
+<HeadContent>
+    <meta name="description" content="Browse used and OEM car spare parts — headlights, tail lights, bumpers and more — by car make, year, and part type. AutoNex Thrissur, Kerala." />
+</HeadContent>
+
+@if (config is not null && config.Template.Equals("showroom", StringComparison.OrdinalIgnoreCase))
+{
+    <ShowroomCatalog />
+}
+else
+{
+    <ClassicCatalog />
+}
+
+@code {
+    private SiteConfig? config;
+
+    protected override async Task OnInitializedAsync()
+    {
+        config = await SiteConfigSvc.GetAsync();
+    }
+}

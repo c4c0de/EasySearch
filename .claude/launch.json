@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "inventory-web",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/Web/InventoryManagement.Web/InventoryManagement.Web.csproj", "--urls", "http://localhost:5050"],
+      "port": 5050
+    }
+  ]
+}

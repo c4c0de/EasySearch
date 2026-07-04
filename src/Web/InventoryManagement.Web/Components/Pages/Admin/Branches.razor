@@ -1,0 +1,166 @@
+@page "/branches"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using InventoryManagement.Application.DTOs
+@using InventoryManagement.Application.Interfaces
+@using InventoryManagement.Domain.Entities
+@using InventoryManagement.Web.Services
+@inject ISiteContentRepository ContentRepo
+@inject SiteConfigService SiteConfigSvc
+
+<PageTitle>Branches</PageTitle>
+
+<div class="form-page">
+    <div class="toolbar">
+        <h2 class="page-title">Branches</h2>
+        <button class="btn-primary" @onclick="StartAdd">+ Add Branch</button>
+    </div>
+    <p class="muted-hint">Each branch shows as a card on the public <a href="/contact" target="_blank">Contact page</a>. The <strong>Primary</strong> branch's address is used in the footer and policy pages.</p>
+
+    @if (showForm)
+    {
+        <div class="card form-card" style="margin-bottom:18px">
+            <h3>@(editingId.HasValue ? "Edit Branch" : "Add Branch")</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Branch Name</label>
+                    <input class="filter-input" @bind="fName" placeholder="e.g. Thrissur Main, Kochi Branch" />
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input class="filter-input" @bind="fPhone" placeholder="+91 ..." />
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Address</label>
+                <textarea class="filter-input" rows="2" @bind="fAddress"></textarea>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Email <small>(optional)</small></label>
+                    <input class="filter-input" @bind="fEmail" />
+                </div>
+                <div class="form-group">
+                    <label>Business Hours <small>(optional)</small></label>
+                    <input class="filter-input" @bind="fHours" placeholder="e.g. Mon-Sat, 10 AM - 7 PM" />
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Google Maps link <small>(optional)</small></label>
+                <input class="filter-input" @bind="fMapsUrl" placeholder="https://maps.google.com/..." />
+            </div>
+            <label class="checkbox-row"><input type="checkbox" @bind="fIsPrimary" /> Primary branch</label>
+            <div class="form-actions">
+                <button class="btn-primary" @onclick="Save"
+                        disabled="@(string.IsNullOrWhiteSpace(fName) || string.IsNullOrWhiteSpace(fAddress))">
+                    @(editingId.HasValue ? "Update" : "Add")
+                </button>
+                <button class="btn-secondary" @onclick="Cancel">Cancel</button>
+            </div>
+        </div>
+    }
+
+    <div class="catalog-table-wrapper">
+        <table class="catalog-table">
+            <thead><tr><th>Branch</th><th>Address</th><th>Phone</th><th>Primary</th><th>Actions</th></tr></thead>
+            <tbody>
+                @foreach (var b in branches)
+                {
+                    <tr>
+                        <td><strong>@b.Name</strong></td>
+                        <td class="text-muted">@b.Address</td>
+                        <td class="text-muted">@b.Phone</td>
+                        <td>
+                            @if (b.IsPrimary) { <span class="attr-filter-badge">★ Primary</span> }
+                            else { <button class="btn-sm-primary" @onclick="() => MakePrimary(b.Id)">Make primary</button> }
+                        </td>
+                        <td>
+                            <button class="btn-sm-primary" @onclick="() => StartEdit(b)">Edit</button>
+                            <button class="btn-sm-danger" @onclick="() => Delete(b.Id)"
+                                    disabled="@(branches.Count <= 1)"
+                                    title="@(branches.Count <= 1 ? "At least one branch is required" : "")">
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private static Guid DefaultDealerId => AppConstants.DefaultDealerId;
+
+    private List<BranchDto> branches = new();
+    private bool showForm;
+    private Guid? editingId;
+    private string fName = "", fAddress = "", fPhone = "", fEmail = "", fHours = "";
+    private string? fMapsUrl;
+    private bool fIsPrimary;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load() => branches = await ContentRepo.GetBranchesAsync(DefaultDealerId);
+
+    private void StartAdd()
+    {
+        editingId = null; fName = fAddress = fPhone = fEmail = fHours = ""; fMapsUrl = null; fIsPrimary = false;
+        showForm = true;
+    }
+
+    private void StartEdit(BranchDto b)
+    {
+        editingId = b.Id; fName = b.Name; fAddress = b.Address; fPhone = b.Phone; fEmail = b.Email;
+        fHours = b.Hours; fMapsUrl = b.MapsUrl; fIsPrimary = b.IsPrimary;
+        showForm = true;
+    }
+
+    private void Cancel() { showForm = false; editingId = null; }
+
+    private async Task Save()
+    {
+        if (editingId.HasValue)
+        {
+            var entity = await ContentRepo.GetBranchByIdAsync(editingId.Value);
+            if (entity is not null)
+            {
+                entity.Name = fName.Trim(); entity.Address = fAddress.Trim(); entity.Phone = fPhone.Trim();
+                entity.Email = fEmail.Trim(); entity.Hours = fHours.Trim();
+                entity.MapsUrl = string.IsNullOrWhiteSpace(fMapsUrl) ? null : fMapsUrl!.Trim();
+                entity.IsPrimary = fIsPrimary;
+                await ContentRepo.UpdateBranchAsync(entity);
+            }
+        }
+        else
+        {
+            await ContentRepo.CreateBranchAsync(new Branch
+            {
+                Id = Guid.NewGuid(),
+                DealerId = DefaultDealerId,
+                Name = fName.Trim(), Address = fAddress.Trim(), Phone = fPhone.Trim(),
+                Email = fEmail.Trim(), Hours = fHours.Trim(),
+                MapsUrl = string.IsNullOrWhiteSpace(fMapsUrl) ? null : fMapsUrl!.Trim(),
+                IsPrimary = fIsPrimary,
+                SortOrder = branches.Count
+            });
+        }
+        SiteConfigSvc.Invalidate();
+        Cancel();
+        await Load();
+    }
+
+    private async Task MakePrimary(Guid id)
+    {
+        await ContentRepo.SetPrimaryBranchAsync(id);
+        SiteConfigSvc.Invalidate();
+        await Load();
+    }
+
+    private async Task Delete(Guid id)
+    {
+        await ContentRepo.DeleteBranchAsync(id);
+        SiteConfigSvc.Invalidate();
+        await Load();
+    }
+}

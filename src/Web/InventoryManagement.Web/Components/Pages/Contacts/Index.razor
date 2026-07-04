@@ -1,0 +1,167 @@
+@page "/contacts"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using InventoryManagement.Application.DTOs
+@using InventoryManagement.Application.Interfaces
+@using InventoryManagement.Domain.Entities
+@using InventoryManagement.Domain.Enums
+@inject IInventoryRepository InventoryRepo
+
+<PageTitle>Contact Accounts</PageTitle>
+
+<div class="form-page">
+    <h2 class="page-title">Contact Accounts</h2>
+    <p class="muted-hint">Add the WhatsApp numbers and Instagram accounts customers can reach you on, then mark one of each as the default used when a part has no specific pick.</p>
+
+    @foreach (var sec in sections)
+    {
+        var list = sec.Type == SocialAccountType.WhatsApp ? whatsApp : instagram;
+        <div class="card form-card" style="margin-bottom:18px">
+            <div class="toolbar">
+                <h3>@sec.Title</h3>
+                <button class="btn-primary" @onclick="() => StartAdd(sec.Type)">+ Add</button>
+            </div>
+
+            @if (formType == sec.Type)
+            {
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Label</label>
+                        <input class="filter-input" @bind="newLabel" placeholder="@sec.LabelHint" />
+                    </div>
+                    <div class="form-group">
+                        <label>@sec.ValueLabel</label>
+                        <input class="filter-input" @bind="newValue" placeholder="@sec.ValueHint" />
+                    </div>
+                </div>
+                <label class="checkbox-row"><input type="checkbox" @bind="newIsDefault" /> Set as default</label>
+                @if (!string.IsNullOrEmpty(error)) { <p class="upload-error">@error</p> }
+                <div class="form-actions">
+                    <button class="btn-primary" @onclick="Save" disabled="@(string.IsNullOrWhiteSpace(newLabel) || string.IsNullOrWhiteSpace(newValue))">
+                        @(editingId.HasValue ? "Update" : "Add")
+                    </button>
+                    <button class="btn-secondary" @onclick="Cancel">Cancel</button>
+                </div>
+            }
+
+            @if (list.Count == 0)
+            {
+                <div class="empty-state">None yet.</div>
+            }
+            else
+            {
+                <div class="catalog-table-wrapper">
+                    <table class="catalog-table">
+                        <thead>
+                            <tr><th>Label</th><th>@sec.ValueLabel</th><th>Default</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var a in list)
+                            {
+                                <tr>
+                                    <td><strong>@a.Label</strong></td>
+                                    <td>@a.Value</td>
+                                    <td>
+                                        @if (a.IsDefault) { <span class="attr-filter-badge">★ Default</span> }
+                                        else { <button class="btn-sm-primary" @onclick="() => MakeDefault(a.Id)">Make default</button> }
+                                    </td>
+                                    <td>
+                                        <button class="btn-sm-primary" @onclick="() => StartEdit(a)">Edit</button>
+                                        <button class="btn-sm-danger" @onclick="() => Delete(a.Id)">Delete</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private static Guid DefaultDealerId => AppConstants.DefaultDealerId;
+
+    private record Section(SocialAccountType Type, string Title, string LabelHint, string ValueLabel, string ValueHint);
+    private readonly Section[] sections =
+    {
+        new(SocialAccountType.WhatsApp, "WhatsApp numbers", "e.g. Sales line", "Number (with country code)", "e.g. 916238744855"),
+        new(SocialAccountType.Instagram, "Instagram accounts", "e.g. Main page", "Handle (without @)", "e.g. autonex_thrissur")
+    };
+
+    private List<SocialAccountDto> whatsApp = new();
+    private List<SocialAccountDto> instagram = new();
+
+    private SocialAccountType? formType;
+    private Guid? editingId;
+    private string newLabel = "";
+    private string newValue = "";
+    private bool newIsDefault;
+    private string? error;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        whatsApp = await InventoryRepo.GetSocialAccountsByTypeAsync(DefaultDealerId, SocialAccountType.WhatsApp);
+        instagram = await InventoryRepo.GetSocialAccountsByTypeAsync(DefaultDealerId, SocialAccountType.Instagram);
+    }
+
+    private void StartAdd(SocialAccountType type)
+    {
+        formType = type; editingId = null; newLabel = ""; newValue = ""; newIsDefault = false; error = null;
+    }
+
+    private void StartEdit(SocialAccountDto a)
+    {
+        formType = a.Type; editingId = a.Id; newLabel = a.Label; newValue = a.Value; newIsDefault = a.IsDefault; error = null;
+    }
+
+    private void Cancel() { formType = null; editingId = null; error = null; }
+
+    private async Task Save()
+    {
+        error = null;
+        var value = newValue.Trim();
+        if (formType == SocialAccountType.WhatsApp)
+        {
+            // Normalise: keep digits only (country code + number).
+            value = new string(value.Where(char.IsDigit).ToArray());
+            if (value.Length < 10) { error = "Enter a valid WhatsApp number with country code, e.g. 916238744855."; return; }
+        }
+        else
+        {
+            value = value.TrimStart('@');
+        }
+
+        if (editingId.HasValue)
+        {
+            var entity = await InventoryRepo.GetSocialAccountByIdAsync(editingId.Value);
+            if (entity is not null)
+            {
+                entity.Label = newLabel.Trim();
+                entity.Value = value;
+                entity.IsDefault = newIsDefault;
+                await InventoryRepo.UpdateSocialAccountAsync(entity);
+            }
+        }
+        else
+        {
+            await InventoryRepo.CreateSocialAccountAsync(new SocialAccount
+            {
+                Id = Guid.NewGuid(),
+                DealerId = DefaultDealerId,
+                Type = formType!.Value,
+                Label = newLabel.Trim(),
+                Value = value,
+                IsDefault = newIsDefault
+            });
+        }
+
+        Cancel();
+        await Load();
+    }
+
+    private async Task MakeDefault(Guid id) { await InventoryRepo.SetDefaultSocialAccountAsync(id); await Load(); }
+    private async Task Delete(Guid id) { await InventoryRepo.DeleteSocialAccountAsync(id); await Load(); }
+}

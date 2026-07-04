@@ -1,0 +1,73 @@
+@using InventoryManagement.Application.DTOs
+
+<ul class="category-tree">
+    @foreach (var cat in Categories)
+    {
+        var hasSub = cat.SubCategories.Count > 0;
+        var isExpanded = ExpandedIds.Contains(cat.Id) || IsAncestorOfSelected(cat, SelectedId);
+        <li>
+            <div class="cat-row">
+                <button class="cat-btn @(SelectedId == cat.Id ? "active" : "")"
+                        @onclick="() => SelectCategory(cat)" type="button">
+                    @cat.Name
+                </button>
+                @if (hasSub)
+                {
+                    <button class="toggle-expand-btn @(isExpanded ? "expanded" : "")"
+                            @onclick="() => ToggleExpand(cat.Id)" type="button" aria-label="Toggle subcategories">
+                        <span class="chevron">▶</span>
+                    </button>
+                }
+            </div>
+            @if (hasSub && isExpanded)
+            {
+                <CategoryTree Categories="cat.SubCategories" SelectedId="SelectedId" OnSelected="OnSelected" />
+            }
+        </li>
+    }
+</ul>
+
+@code {
+    [Parameter, EditorRequired] public List<CategoryDto> Categories { get; set; } = new();
+    [Parameter] public Guid? SelectedId { get; set; }
+    [Parameter] public EventCallback<Guid?> OnSelected { get; set; }
+
+    private HashSet<Guid> ExpandedIds { get; set; } = new();
+
+    private void ToggleExpand(Guid id)
+    {
+        if (ExpandedIds.Contains(id))
+        {
+            ExpandedIds.Remove(id);
+        }
+        else
+        {
+            ExpandedIds.Add(id);
+        }
+    }
+
+    private async Task SelectCategory(CategoryDto cat)
+    {
+        if (cat.SubCategories.Count > 0)
+        {
+            ExpandedIds.Add(cat.Id);
+        }
+        await OnSelected.InvokeAsync(cat.Id);
+    }
+
+    private bool IsAncestorOfSelected(CategoryDto parent, Guid? selectedId)
+    {
+        if (!selectedId.HasValue) return false;
+        return ContainsChild(parent.SubCategories, selectedId.Value);
+    }
+
+    private bool ContainsChild(List<CategoryDto> subCats, Guid targetId)
+    {
+        foreach (var sub in subCats)
+        {
+            if (sub.Id == targetId) return true;
+            if (sub.SubCategories.Count > 0 && ContainsChild(sub.SubCategories, targetId)) return true;
+        }
+        return false;
+    }
+}

@@ -1,0 +1,186 @@
+@page "/parts/create"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using InventoryManagement.Application.DTOs
+@using InventoryManagement.Application.Interfaces
+@using InventoryManagement.Domain.Entities
+@using InventoryManagement.Domain.Enums
+@inject IInventoryRepository InventoryRepo
+@inject ICategoryRepository CategoryRepo
+@inject NavigationManager Nav
+
+<PageTitle>Add Part</PageTitle>
+
+<div class="form-page">
+    <h2>Add Part</h2>
+    <p class="muted-hint">Upload the photo, then tag it. Type a new car or part type and it's created automatically.</p>
+
+    <div class="form-group">
+        <label>Part Photo</label>
+        <ImageUpload OnUploaded="url => imageUrl = url" />
+        @if (!string.IsNullOrEmpty(imageUrl))
+        {
+            <img src="@imageUrl" alt="Part preview" class="image-preview" />
+        }
+    </div>
+
+    <div class="form-group">
+        <label>Part Name <small>(optional)</small></label>
+        <input class="filter-input" @bind="model.Title" placeholder="e.g. Rear diffuser, OEM tail light" />
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Car Make</label>
+            <input class="filter-input" list="makes" @bind="model.VehicleMake"
+                   placeholder="e.g. Maruti Swift, Honda City" />
+            <datalist id="makes">
+                @foreach (var m in makes)
+                {
+                    <option value="@m" />
+                }
+            </datalist>
+        </div>
+        <div class="form-group">
+            <label>Year <small>(optional)</small></label>
+            <input type="number" class="filter-input" @bind="model.VehicleYear"
+                   placeholder="e.g. 2024" min="1990" max="2030" />
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Part Type</label>
+            <input class="filter-input" list="parttypes" @bind="model.PartType"
+                   placeholder="e.g. Headlight, Tail Light, Diffuser" />
+            <datalist id="parttypes">
+                @foreach (var c in partTypes)
+                {
+                    <option value="@c.Name" />
+                }
+            </datalist>
+        </div>
+        <div class="form-group">
+            <label>Price (₹) <small>(optional)</small></label>
+            <input type="number" class="filter-input" @bind="model.Price" />
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Status</label>
+            <select class="filter-input" @bind="model.Status">
+                @foreach (var s in Enum.GetValues<ListingStatus>())
+                {
+                    <option value="@s">@s</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>WhatsApp contact <small>(optional)</small></label>
+            <select class="filter-input" @bind="model.WhatsAppAccountId">
+                <option value="">— Use default —</option>
+                @foreach (var a in whatsAppAccounts)
+                {
+                    <option value="@a.Id">@a.Display@(a.IsDefault ? " ★" : "")</option>
+                }
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Instagram contact <small>(optional)</small></label>
+            <select class="filter-input" @bind="model.InstagramAccountId">
+                <option value="">— Use default —</option>
+                @foreach (var a in instagramAccounts)
+                {
+                    <option value="@a.Id">@a.Display@(a.IsDefault ? " ★" : "")</option>
+                }
+            </select>
+        </div>
+    </div>
+    <p class="muted-hint" style="margin:-8px 0 8px"><a href="/contacts" class="clear-btn">+ Manage WhatsApp / Instagram accounts</a></p>
+
+    <div class="form-group">
+        <label>Description / Notes <small>(optional)</small></label>
+        <textarea class="filter-input" @bind="model.Description"
+                  rows="2" placeholder="e.g. Minor scratch, OEM part, Used 2 years"></textarea>
+    </div>
+
+    @if (!string.IsNullOrEmpty(error))
+    {
+        <p class="upload-error">@error</p>
+    }
+
+    <div class="form-actions">
+        <button class="btn-primary" @onclick="Save"
+                disabled="@(saving || string.IsNullOrWhiteSpace(model.VehicleMake) || string.IsNullOrWhiteSpace(model.PartType))">
+            @(saving ? "Saving..." : "Add Part")
+        </button>
+        <a href="/inventory" class="btn-secondary">Cancel</a>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? VehicleId { get; set; }
+
+    private static Guid DefaultDealerId => AppConstants.DefaultDealerId;
+
+    private CreateListingDto model = new();
+    private List<string> makes = new();
+    private List<Category> partTypes = new();
+    private List<SocialAccountDto> whatsAppAccounts = new();
+    private List<SocialAccountDto> instagramAccounts = new();
+    private string? imageUrl;
+    private bool saving;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        makes = await InventoryRepo.GetDistinctMakesAsync(DefaultDealerId);
+        partTypes = await CategoryRepo.GetAllFlatAsync();
+        whatsAppAccounts = await InventoryRepo.GetSocialAccountsByTypeAsync(DefaultDealerId, SocialAccountType.WhatsApp);
+        instagramAccounts = await InventoryRepo.GetSocialAccountsByTypeAsync(DefaultDealerId, SocialAccountType.Instagram);
+
+        // Pre-fill from a vehicle link (e.g. "X parts →" on the Vehicles page)
+        if (VehicleId is not null && Guid.TryParse(VehicleId, out var vid))
+        {
+            var v = await InventoryRepo.GetVehicleByIdAsync(vid);
+            if (v is not null) { model.VehicleMake = v.Make; model.VehicleYear = v.Year; }
+        }
+    }
+
+    private async Task Save()
+    {
+        error = null;
+        saving = true;
+        try
+        {
+            var vehicle = await InventoryRepo.GetOrCreateVehicleAsync(DefaultDealerId, model.VehicleMake, model.VehicleYear);
+            var category = await InventoryRepo.GetOrCreateCategoryAsync(model.PartType);
+
+            await InventoryRepo.CreateListingAsync(new InventoryListing
+            {
+                Id = Guid.NewGuid(),
+                DealerId = DefaultDealerId,
+                VehicleId = vehicle.Id,
+                CategoryId = category.Id,
+                Title = string.IsNullOrWhiteSpace(model.Title) ? null : model.Title!.Trim(),
+                Description = string.IsNullOrWhiteSpace(model.Description) ? null : model.Description!.Trim(),
+                Price = model.Price,
+                Status = model.Status,
+                WhatsAppAccountId = model.WhatsAppAccountId,
+                InstagramAccountId = model.InstagramAccountId,
+                ImageUrl = imageUrl,
+                CreatedAt = DateTime.UtcNow
+            });
+            Nav.NavigateTo("/inventory");
+        }
+        catch (Exception ex)
+        {
+            error = $"Could not save: {ex.Message}";
+            saving = false;
+        }
+    }
+}

@@ -1,0 +1,164 @@
+@page "/categories"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using InventoryManagement.Application.DTOs
+@using InventoryManagement.Application.Interfaces
+@using InventoryManagement.Domain.Entities
+@inject ICategoryRepository CategoryRepo
+
+<PageTitle>Categories</PageTitle>
+
+<div class="form-page">
+    <div class="toolbar">
+        <h2 class="page-title">Categories</h2>
+        <button class="btn-primary" @onclick="() => { showForm = true; editingId = null; ResetForm(); }">+ New Category</button>
+    </div>
+
+    <p class="muted-hint">Organise your inventory with hierarchical categories. Sub-categories appear nested inside their parent in the sidebar filter.</p>
+
+    @if (showForm)
+    {
+        <div class="card form-card">
+            <h3>@(editingId.HasValue ? "Edit Category" : "Add Category")</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Category Name</label>
+                    <input class="filter-input" @bind="newName" placeholder="e.g. Laptops, Tyres, Furniture" />
+                </div>
+                <div class="form-group">
+                    <label>Parent Category <small>(leave blank for top-level)</small></label>
+                    <select class="filter-input" @bind="newParentId">
+                        <option value="">— None (Top Level) —</option>
+                        @foreach (var cat in flatCategories.Where(c => c.Id != editingId))
+                        {
+                            <option value="@cat.Id">@GetIndentedName(cat, flatCategories)</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button class="btn-primary" @onclick="Save" disabled="@(string.IsNullOrWhiteSpace(newName))">
+                    @(editingId.HasValue ? "Update" : "Add")
+                </button>
+                <button class="btn-secondary" @onclick="Cancel">Cancel</button>
+            </div>
+        </div>
+    }
+
+    @if (tree.Count == 0)
+    {
+        <div class="empty-state">No categories yet.</div>
+    }
+    else
+    {
+        <div class="attr-list">
+            @RenderTree(tree, 0)
+        </div>
+    }
+</div>
+
+@code {
+    private List<CategoryDto> tree = new();
+    private List<Category> flatCategories = new();
+
+    private bool showForm;
+    private Guid? editingId;
+    private string newName = "";
+    private string newParentId = "";
+
+    protected override async Task OnInitializedAsync() => await Reload();
+
+    private async Task Reload()
+    {
+        tree = await CategoryRepo.GetCategoryTreeAsync();
+        flatCategories = await CategoryRepo.GetAllFlatAsync();
+    }
+
+    private void ResetForm() { newName = ""; newParentId = ""; }
+
+    private void StartEdit(CategoryDto cat)
+    {
+        editingId = cat.Id;
+        newName = cat.Name;
+        newParentId = cat.ParentCategoryId?.ToString() ?? "";
+        showForm = true;
+    }
+
+    private void Cancel() { showForm = false; editingId = null; ResetForm(); }
+
+    private async Task Save()
+    {
+        var slug = newName.Trim().ToLower().Replace(" ", "-");
+        Guid? parentId = Guid.TryParse(newParentId, out var pid) ? pid : null;
+
+        if (editingId.HasValue)
+        {
+            var existing = flatCategories.First(c => c.Id == editingId.Value);
+            existing.Name = newName.Trim();
+            existing.Slug = slug;
+            existing.ParentCategoryId = parentId;
+            // ICategoryRepository doesn't have Update yet — add inline via a workaround
+            // We'll add UpdateAsync to the interface/repo below
+            await CategoryRepo.UpdateAsync(existing);
+        }
+        else
+        {
+            var cat = new Category
+            {
+                Id = Guid.NewGuid(),
+                Name = newName.Trim(),
+                Slug = slug,
+                ParentCategoryId = parentId
+            };
+            await CategoryRepo.CreateAsync(cat);
+        }
+
+        await Reload();
+        Cancel();
+    }
+
+    private async Task Delete(Guid id)
+    {
+        await CategoryRepo.DeleteAsync(id);
+        await Reload();
+    }
+
+    // Build indented display name for the parent dropdown
+    private static string GetIndentedName(Category cat, List<Category> all, int depth = 0)
+    {
+        if (cat.ParentCategoryId is null) return cat.Name;
+        var parent = all.FirstOrDefault(c => c.Id == cat.ParentCategoryId);
+        if (parent is null) return cat.Name;
+        return GetIndentedName(parent, all, depth + 1) + " › " + cat.Name;
+    }
+
+    private RenderFragment RenderTree(List<CategoryDto> nodes, int depth) => __builder =>
+    {
+        foreach (var node in nodes)
+        {
+            <div class="attr-row" style="margin-left: @(depth * 24)px">
+                <div class="attr-info">
+                    @if (depth > 0) { <span style="color:var(--color-muted)">└</span> }
+                    <span class="attr-name">@node.Name</span>
+                    <span class="attr-type-badge">@node.Slug</span>
+                    @if (node.SubCategories.Count > 0)
+                    {
+                        <span class="attr-filter-badge">@node.SubCategories.Count sub</span>
+                    }
+                </div>
+                <div class="attr-actions">
+                    <button class="btn-sm-primary" @onclick="() => StartEdit(node)">Edit</button>
+                    <button class="btn-sm-danger" @onclick="() => Delete(node.Id)"
+                            disabled="@(node.SubCategories.Count > 0)"
+                            title="@(node.SubCategories.Count > 0 ? "Delete sub-categories first" : "")">
+                        Delete
+                    </button>
+                </div>
+            </div>
+            @if (node.SubCategories.Count > 0)
+            {
+                @RenderTree(node.SubCategories, depth + 1)
+            }
+        }
+    };
+}

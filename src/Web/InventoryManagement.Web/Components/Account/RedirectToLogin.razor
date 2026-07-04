@@ -1,0 +1,10 @@
+@inject NavigationManager Nav
+
+@code {
+    protected override void OnInitialized()
+    {
+        var returnUrl = Uri.EscapeDataString(new Uri(Nav.Uri).PathAndQuery);
+        // Full reload so the static-SSR login page can issue the auth cookie.
+        Nav.NavigateTo($"/account/login?returnUrl={returnUrl}", forceLoad: true);
+    }
+}

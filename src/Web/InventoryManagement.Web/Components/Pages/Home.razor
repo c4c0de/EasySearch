@@ -1,0 +1,72 @@
+@page "/dashboard"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using InventoryManagement.Application.Interfaces
+@using InventoryManagement.Domain.Enums
+@inject IInventoryRepository InventoryRepo
+@inject IDealerRepository DealerRepo
+
+<PageTitle>Dashboard</PageTitle>
+
+<div class="dashboard">
+    <h2 class="page-title">Dashboard</h2>
+
+    <div class="stat-cards">
+        <div class="stat-card">
+            <div class="stat-label">Available Parts</div>
+            <div class="stat-value">@availableCount</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Sold</div>
+            <div class="stat-value">@soldCount</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Vehicles</div>
+            <div class="stat-value">@vehicleCount</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Dealer</div>
+            <div class="stat-value">@dealerName</div>
+        </div>
+    </div>
+
+    <div class="quick-actions">
+        <a href="/inventory" class="btn-primary">View Parts</a>
+        <a href="/vehicles" class="btn-secondary">Vehicles</a>
+        <a href="/parts/create" class="btn-secondary">+ Add Part</a>
+    </div>
+</div>
+
+@code {
+    private static Guid DefaultDealerId => AppConstants.DefaultDealerId;
+
+    private int availableCount;
+    private int soldCount;
+    private int vehicleCount;
+    private string dealerName = "Loading...";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var dealer = await DealerRepo.GetByIdAsync(DefaultDealerId);
+        dealerName = dealer?.Name ?? "Unknown";
+
+        var available = await InventoryRepo.GetFilteredListingsAsync(new()
+        {
+            DealerId = DefaultDealerId,
+            Status = ListingStatus.Available,
+            PageSize = 1
+        });
+        availableCount = available.TotalCount;
+
+        var sold = await InventoryRepo.GetFilteredListingsAsync(new()
+        {
+            DealerId = DefaultDealerId,
+            Status = ListingStatus.Sold,
+            PageSize = 1
+        });
+        soldCount = sold.TotalCount;
+
+        var vehicles = await InventoryRepo.GetVehiclesAsync(DefaultDealerId);
+        vehicleCount = vehicles.Count;
+    }
+}

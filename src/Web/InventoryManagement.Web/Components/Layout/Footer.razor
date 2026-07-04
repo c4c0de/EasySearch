@@ -1,0 +1,42 @@
+@using InventoryManagement.Web.Services
+@inject SiteConfigService SiteConfigSvc
+
+@if (config is not null)
+{
+    <footer class="site-footer">
+        <div class="footer-inner">
+            <div class="footer-col">
+                <div class="footer-brand">@config.BrandName</div>
+                <p class="footer-muted">@config.LegalName</p>
+                <p class="footer-muted">@config.Address</p>
+            </div>
+
+            <div class="footer-col">
+                <div class="footer-heading">Policies</div>
+                <a href="/terms">Terms &amp; Conditions</a>
+                <a href="/privacy">Privacy Policy</a>
+                <a href="/refund">Refund &amp; Cancellation</a>
+                <a href="/shipping">Shipping &amp; Delivery</a>
+                <a href="/pricing">Pricing</a>
+            </div>
+
+            <div class="footer-col">
+                <div class="footer-heading">Contact</div>
+                <a href="/contact">Contact Us</a>
+                <a href="mailto:@config.SupportEmail">@config.SupportEmail</a>
+                <a href="tel:@config.SupportPhone.Replace(" ", "")">@config.SupportPhone</a>
+                <p class="footer-muted">@config.BusinessHours</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            © @DateTime.UtcNow.Year @config.LegalName. All rights reserved.
+        </div>
+    </footer>
+}
+
+@code {
+    private SiteConfig? config;
+
+    protected override async Task OnInitializedAsync()
+        => config = await SiteConfigSvc.GetAsync();
+}
