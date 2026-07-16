@@ -168,7 +168,7 @@
         if (isBusy) return;
         isBusy = true;
         try { await InventoryRepo.SetDefaultSocialAccountAsync(id); await Load(); }
-        finally { isBusy = false; }
+        finally { isBusy = false; StateHasChanged(); }
     }
 
     private async Task Delete(Guid id)
@@ -176,6 +176,6 @@
         if (isBusy) return;
         isBusy = true;
         try { await InventoryRepo.DeleteSocialAccountAsync(id); await Load(); }
-        finally { isBusy = false; }
+        finally { isBusy = false; StateHasChanged(); }
     }
 }

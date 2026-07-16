@@ -121,8 +121,18 @@ public class SiteContentRepository(AppDbContext context) : ISiteContentRepositor
     {
         var branch = await context.Branches.FindAsync([id], ct);
         if (branch is null) return;
+
+        // Detach before ExecuteUpdateAsync: ExecuteUpdate bypasses the change tracker, so any
+        // entity already cached with IsPrimary=true would be written back by SaveChangesAsync
+        // and silently re-corrupt the flag after the 2nd or 3rd switch.
+        context.Entry(branch).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+
         await ClearPrimaryAsync(branch.DealerId, id, ct);
-        branch.IsPrimary = true;
+
+        // Re-attach as a minimal stub and mark only IsPrimary as modified.
+        var stub = new Branch { Id = id, IsPrimary = true };
+        context.Branches.Attach(stub);
+        context.Entry(stub).Property(b => b.IsPrimary).IsModified = true;
         await context.SaveChangesAsync(ct);
     }
 

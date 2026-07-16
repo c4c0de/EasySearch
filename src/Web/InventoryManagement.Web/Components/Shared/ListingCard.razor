@@ -226,7 +226,7 @@
                     await OnChanged.InvokeAsync();
                 }
             }
-            finally { isBusy = false; }
+            finally { isBusy = false; StateHasChanged(); }
         }
     }
 
@@ -242,6 +242,6 @@
                 await Storage.DeleteAsync(imageUrl);
             await OnChanged.InvokeAsync();
         }
-        finally { isBusy = false; }
+        finally { isBusy = false; StateHasChanged(); }
     }
 }

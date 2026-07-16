@@ -119,7 +119,7 @@
             await Reload();
             Cancel();
         }
-        finally { isBusy = false; }
+        finally { isBusy = false; StateHasChanged(); }
     }
 
     private async Task Delete(Guid id)
@@ -127,7 +127,7 @@
         if (isBusy) return;
         isBusy = true;
         try { await CategoryRepo.DeleteAsync(id); await Reload(); }
-        finally { isBusy = false; }
+        finally { isBusy = false; StateHasChanged(); }
     }
 
     // Build indented display name for the parent dropdown

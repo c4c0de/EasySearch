@@ -160,7 +160,7 @@
             vehicles = await InventoryRepo.GetVehiclesAsync(DefaultDealerId);
             Cancel();
         }
-        finally { isBusy = false; }
+        finally { isBusy = false; StateHasChanged(); }
     }
 
     private async Task Delete(Guid id)
@@ -173,6 +173,6 @@
             confirmingId = null;
             vehicles = await InventoryRepo.GetVehiclesAsync(DefaultDealerId);
         }
-        finally { isBusy = false; }
+        finally { isBusy = false; StateHasChanged(); }
     }
 }
