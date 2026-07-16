@@ -12,8 +12,20 @@ namespace InventoryManagement.Web.Services;
 /// </summary>
 public static class SeedContent
 {
-    public static async Task EnsureSeededAsync(AppDbContext db, BusinessInfo biz)
+    public static async Task EnsureSeededAsync(AppDbContext db, BusinessInfo biz, DealerAuth auth)
     {
+        // ---- Admin credential (independent of the other seeds — existing prod DBs get it added) ----
+        if (!await db.SiteSettings.AnyAsync(s => s.Key == AuthKeys.PasswordHash))
+        {
+            // Seed from config: prefer the configured hash, else hash the configured plaintext once.
+            var hash = !string.IsNullOrWhiteSpace(auth.PasswordHash)
+                ? auth.PasswordHash
+                : PasswordHasher.Hash(auth.Password);
+            db.SiteSettings.Add(new SiteSetting { Key = AuthKeys.PasswordHash, Value = hash });
+        }
+        if (!await db.SiteSettings.AnyAsync(s => s.Key == AuthKeys.Username))
+            db.SiteSettings.Add(new SiteSetting { Key = AuthKeys.Username, Value = auth.Username });
+
         // ---- Settings ----
         if (!await db.SiteSettings.AnyAsync())
         {

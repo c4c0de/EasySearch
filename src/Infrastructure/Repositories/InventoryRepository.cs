@@ -68,9 +68,9 @@ public class InventoryRepository(AppDbContext context) : IInventoryRepository
             .ToListAsync(ct);
 
         // Default accounts used when a part has no explicit pick.
-        var defaultWa = await context.SocialAccounts.FirstOrDefaultAsync(
+        var defaultWa = await context.SocialAccounts.AsNoTracking().FirstOrDefaultAsync(
             s => s.DealerId == query.DealerId && s.Type == SocialAccountType.WhatsApp && s.IsDefault, ct);
-        var defaultIg = await context.SocialAccounts.FirstOrDefaultAsync(
+        var defaultIg = await context.SocialAccounts.AsNoTracking().FirstOrDefaultAsync(
             s => s.DealerId == query.DealerId && s.Type == SocialAccountType.Instagram && s.IsDefault, ct);
 
         var items = listings.Select(l => new InventoryListingDto
@@ -236,14 +236,18 @@ public class InventoryRepository(AppDbContext context) : IInventoryRepository
         Id = s.Id, Type = s.Type, Label = s.Label, Value = s.Value, IsDefault = s.IsDefault
     };
 
+    // AsNoTracking on reads: SetDefault uses ExecuteUpdate (bypasses the change tracker),
+    // so tracked entities would show stale IsDefault values on reload.
     public async Task<List<SocialAccountDto>> GetSocialAccountsAsync(Guid dealerId, CancellationToken ct = default)
         => (await context.SocialAccounts
+            .AsNoTracking()
             .Where(s => s.DealerId == dealerId)
             .OrderByDescending(s => s.IsDefault).ThenBy(s => s.Label)
             .ToListAsync(ct)).Select(ToDto).ToList();
 
     public async Task<List<SocialAccountDto>> GetSocialAccountsByTypeAsync(Guid dealerId, SocialAccountType type, CancellationToken ct = default)
         => (await context.SocialAccounts
+            .AsNoTracking()
             .Where(s => s.DealerId == dealerId && s.Type == type)
             .OrderByDescending(s => s.IsDefault).ThenBy(s => s.Label)
             .ToListAsync(ct)).Select(ToDto).ToList();

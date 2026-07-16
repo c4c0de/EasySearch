@@ -1,8 +1,9 @@
 namespace InventoryManagement.Web.Options;
 
 /// <summary>
-/// Single dealer login credential, bound from the "DealerAuth" config section.
-/// Keep real values only in gitignored appsettings.Production.json.
+/// FIRST-BOOT SEED ONLY. The live credential is stored (hashed) in the SiteSettings table and
+/// managed at /account/change-password. These config values are copied into the DB the first
+/// time the app runs against an empty credential and are ignored afterwards.
 /// </summary>
 public class DealerAuth
 {

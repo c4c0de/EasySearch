@@ -19,13 +19,13 @@
                 }
                 else
                 {
-                    <span>🔧 @(config?.BrandName ?? "AutoNex")</span>
+                    <span>@(config?.BrandName ?? "AutoNex")</span>
                 }
             </a>
+            @* Dealer access is via /account/login directly — no public login button. *@
             <nav class="public-nav">
                 <a href="/">Browse Parts</a>
                 <a href="/contact">Contact</a>
-                <a href="/account/login" class="public-login-btn">Dealer Login</a>
             </nav>
         </div>
     </header>

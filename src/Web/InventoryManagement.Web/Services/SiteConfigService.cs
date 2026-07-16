@@ -79,6 +79,9 @@ public class SiteConfigService(ISiteContentRepository repo, IMemoryCache cache, 
             return cached;
 
         var settings = await repo.GetAllSettingsAsync(ct);
+        // Credential keys must never reach public-facing snapshots or {{token}} replacement.
+        foreach (var key in settings.Keys.Where(k => k.StartsWith(AuthKeys.Prefix, StringComparison.OrdinalIgnoreCase)).ToList())
+            settings.Remove(key);
         ApplyFallbacks(settings, fallback.Value);
         var branches = await repo.GetBranchesAsync(AppConstants.DefaultDealerId, ct);
 

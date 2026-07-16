@@ -10,7 +10,7 @@ public class SiteContentRepository(AppDbContext context) : ISiteContentRepositor
 {
     // ---- Settings ----
     public async Task<Dictionary<string, string>> GetAllSettingsAsync(CancellationToken ct = default)
-        => await context.SiteSettings.ToDictionaryAsync(s => s.Key, s => s.Value, ct);
+        => await context.SiteSettings.AsNoTracking().ToDictionaryAsync(s => s.Key, s => s.Value, ct);
 
     public async Task SaveSettingsAsync(Dictionary<string, string> settings, CancellationToken ct = default)
     {
@@ -31,12 +31,12 @@ public class SiteContentRepository(AppDbContext context) : ISiteContentRepositor
 
     public async Task<ContentPageDto?> GetPageAsync(string slug, CancellationToken ct = default)
     {
-        var page = await context.ContentPages.FirstOrDefaultAsync(p => p.Slug == slug, ct);
+        var page = await context.ContentPages.AsNoTracking().FirstOrDefaultAsync(p => p.Slug == slug, ct);
         return page is null ? null : ToDto(page);
     }
 
     public async Task<List<ContentPageDto>> GetPagesAsync(CancellationToken ct = default)
-        => (await context.ContentPages.OrderBy(p => p.Title).ToListAsync(ct)).Select(ToDto).ToList();
+        => (await context.ContentPages.AsNoTracking().OrderBy(p => p.Title).ToListAsync(ct)).Select(ToDto).ToList();
 
     public async Task SavePageAsync(string slug, string title, string markdown, CancellationToken ct = default)
     {
@@ -60,7 +60,10 @@ public class SiteContentRepository(AppDbContext context) : ISiteContentRepositor
     };
 
     public async Task<List<BranchDto>> GetBranchesAsync(Guid dealerId, CancellationToken ct = default)
+        // AsNoTracking: SetPrimary uses ExecuteUpdate (bypasses the change tracker), so reads must
+        // hit the DB fresh — otherwise the circuit-scoped context serves stale cached entities.
         => (await context.Branches
+            .AsNoTracking()
             .Where(b => b.DealerId == dealerId)
             .OrderByDescending(b => b.IsPrimary).ThenBy(b => b.SortOrder).ThenBy(b => b.Name)
             .ToListAsync(ct)).Select(ToDto).ToList();

@@ -60,14 +60,17 @@ using (var scope = app.Services.CreateScope())
     else
         await db.Database.MigrateAsync();
 
-    // Seed admin-editable content from appsettings the first time only (never overwrites edits).
+    // Seed admin-editable content + the admin credential from appsettings the first time only
+    // (never overwrites edits — after first boot the config credential is inert).
     var biz = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<BusinessInfo>>().Value;
-    await SeedContent.EnsureSeededAsync(db, biz);
-
-    // Nudge the operator off plaintext credentials once a hash is available.
     var auth = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<DealerAuth>>().Value;
-    if (string.IsNullOrWhiteSpace(auth.PasswordHash))
-        app.Logger.LogWarning("DealerAuth is using a PLAINTEXT password. Set DealerAuth:PasswordHash (PBKDF2) in appsettings.Production.json and remove the plaintext Password.");
+    await SeedContent.EnsureSeededAsync(db, biz, auth);
+
+    // Warn if the stored credential is still a well-known placeholder.
+    var storedHash = (await db.SiteSettings.FindAsync(AuthKeys.PasswordHash))?.Value;
+    if (storedHash is not null &&
+        (PasswordHasher.Verify("change-me", storedHash) || PasswordHasher.Verify("CHANGE-THIS-STRONG-PASSWORD", storedHash)))
+        app.Logger.LogWarning("The admin password is still the default placeholder. Change it at /account/change-password.");
 }
 
 if (!app.Environment.IsDevelopment())

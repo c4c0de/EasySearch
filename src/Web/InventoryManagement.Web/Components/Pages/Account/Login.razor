@@ -1,9 +1,11 @@
 @page "/account/login"
 @layout PublicLayout
 @using System.Security.Claims
+@using InventoryManagement.Application.Interfaces
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Authentication.Cookies
 @inject IOptions<DealerAuth> AuthOpt
+@inject ISiteContentRepository ContentRepo
 @inject NavigationManager Nav
 
 <PageTitle>Dealer Login</PageTitle>
@@ -54,12 +56,22 @@
             return;
         }
 
-        var cfg = AuthOpt.Value;
-        var passwordOk = !string.IsNullOrWhiteSpace(cfg.PasswordHash)
-            ? PasswordHasher.Verify(Input.Password, cfg.PasswordHash)
-            : string.Equals(Input.Password, cfg.Password, StringComparison.Ordinal);
+        // Credential lives in the database (seeded from config on first boot). No plaintext path.
+        var settings = await ContentRepo.GetAllSettingsAsync();
+        var storedUser = settings.GetValueOrDefault(AuthKeys.Username);
+        var storedHash = settings.GetValueOrDefault(AuthKeys.PasswordHash);
 
-        if (!string.Equals(Input.Username, cfg.Username, StringComparison.Ordinal) || !passwordOk)
+        // Belt & braces if seeding hasn't run (should never happen): derive from config.
+        if (string.IsNullOrWhiteSpace(storedHash))
+        {
+            var cfg = AuthOpt.Value;
+            storedUser = cfg.Username;
+            storedHash = !string.IsNullOrWhiteSpace(cfg.PasswordHash) ? cfg.PasswordHash : PasswordHasher.Hash(cfg.Password);
+        }
+
+        var passwordOk = PasswordHasher.Verify(Input.Password, storedHash);
+
+        if (!string.Equals(Input.Username, storedUser, StringComparison.Ordinal) || !passwordOk)
         {
             await Task.Delay(1500); // constant cost per failed attempt
             if (++failedAttempts >= 5)
@@ -79,7 +91,7 @@
 
         var claims = new[]
         {
-            new Claim(ClaimTypes.Name, cfg.Username),
+            new Claim(ClaimTypes.Name, storedUser ?? Input.Username),
             new Claim(ClaimTypes.Role, "Dealer")
         };
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);

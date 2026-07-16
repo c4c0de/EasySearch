@@ -1439,6 +1439,11 @@ a:hover {
     }
 }
 
+/* ── Admin table action buttons: identical size, side by side ── */
+.catalog-table td:last-child { white-space: nowrap; }
+.catalog-table td .btn-sm-primary,
+.catalog-table td .btn-sm-danger { min-width: 72px; justify-content: center; margin: 2px 4px 2px 0; }
+
 /* ── White-label: theme picker, branches, page editor, logo ── */
 .theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-top: 10px; }
 .theme-card { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 14px; background: var(--color-bg); border: 2px solid var(--color-border); border-radius: var(--radius); cursor: pointer; text-align: left; color: var(--color-text); font: inherit; transition: var(--transition); }
@@ -1457,9 +1462,15 @@ a:hover {
 .token-help summary { cursor: pointer; }
 .token-chip { display: inline-block; background: var(--color-surface-hover, #eef2ff); border: 1px solid var(--color-border); border-radius: 6px; padding: 2px 8px; margin: 3px 4px 0 0; font-size: 12px; }
 
-.public-logo { max-height: 42px; max-width: 200px; display: block; }
+/* Logo never distorts: fixed height, width follows the image's own ratio. */
+.public-logo { height: 40px; width: auto; max-width: 220px; object-fit: contain; display: block; }
 .logo-preview-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-.logo-preview { max-height: 56px; max-width: 220px; background: #fff; border: 1px solid var(--color-border); border-radius: var(--radius-sm, 8px); padding: 6px; }
+.logo-preview { height: 56px; width: auto; max-width: 240px; object-fit: contain; background: #fff; border: 1px solid var(--color-border); border-radius: var(--radius-sm, 8px); padding: 6px; }
+.logo-ratio-warning { font-size: 12px; color: var(--color-reserved, #f59e0b); margin: 6px 0 0; }
+
+/* Admin sidebar SVG icons */
+.nav-icon { width: 18px; height: 18px; flex-shrink: 0; vertical-align: -3px; margin-right: 8px; }
+.inline-icon { width: 14px; height: 14px; vertical-align: -2px; margin-left: 4px; }
 .save-confirm { color: var(--color-active, #10b981); font-weight: 600; font-size: 14px; }
 
 /* ── Showroom Template & Layout ── */
@@ -1575,36 +1586,67 @@ a:hover {
     color: var(--color-muted);
 }
 
+/* One consistent control system: identical height, radius, border, and focus ring
+   for text, number, and select chips. Fixed widths so nothing shifts as values change. */
 .chip-input {
     background: var(--color-bg);
     border: 1px solid var(--color-border);
-    border-radius: 20px;
+    border-radius: 19px;
     padding: 6px 14px;
     font-size: 13px;
     color: var(--color-text);
     transition: var(--transition);
-    height: 36px;
+    height: 38px;
+    width: 170px;
 }
 
 .chip-input:focus {
     outline: none;
     border-color: var(--color-primary);
     background: var(--color-surface);
+    box-shadow: 0 0 0 3px var(--color-primary-glow);
 }
 
+/* Replace the native select look with one shared, subtle chevron. */
+select.chip-input,
+select.filter-input,
+.status-select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 34px;
+    cursor: pointer;
+}
+select.chip-input::-ms-expand,
+select.filter-input::-ms-expand { display: none; }
+
+select.chip-input { width: 180px; }
+
 .year-chip {
-    width: 90px;
+    width: 92px;
 }
 
 .chip-price-inputs {
     display: flex;
     align-items: center;
     gap: 6px;
+    color: var(--color-muted);
 }
 
 .price-input {
-    width: 80px;
+    width: 92px;
 }
+
+.chip-availability { width: 140px; }
+.chip-sort-select { width: 150px; }
+
+/* Hide number-input spinners in the chip bar for a cleaner look (typing + clamp still applies). */
+.chip-input[type="number"]::-webkit-outer-spin-button,
+.chip-input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.chip-input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 .chip-sort {
     margin-left: auto;

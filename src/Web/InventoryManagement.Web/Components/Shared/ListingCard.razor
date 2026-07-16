@@ -18,7 +18,9 @@
         <span class="status-badge @StatusClass">@Listing.Status</span>
         @if (!isEditing)
         {
-            <button class="img-edit-btn" title="Edit part" @onclick="StartEdit">✏️</button>
+            <button class="img-edit-btn" title="Edit part" @onclick="StartEdit">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
         }
     </div>
 
@@ -32,7 +34,7 @@
             <input class="filter-input" @bind="edit.Title" placeholder="Optional name" />
 
             <label class="edit-label">Car Make</label>
-            <input class="filter-input" list="makes-@Listing.Id" @bind="edit.VehicleMake" />
+            <input class="filter-input" list="makes-@Listing.Id" @bind="edit.VehicleMake" @bind:event="oninput" />
             <datalist id="makes-@Listing.Id">
                 @foreach (var m in makes)
                 {
@@ -44,7 +46,7 @@
             <input type="number" class="filter-input" @bind="edit.VehicleYear" min="1990" max="2030" />
 
             <label class="edit-label">Part Type</label>
-            <input class="filter-input" list="types-@Listing.Id" @bind="edit.PartType" />
+            <input class="filter-input" list="types-@Listing.Id" @bind="edit.PartType" @bind:event="oninput" />
             <datalist id="types-@Listing.Id">
                 @foreach (var c in partTypes)
                 {
@@ -53,7 +55,7 @@
             </datalist>
 
             <label class="edit-label">Price (₹)</label>
-            <input type="number" class="filter-input" @bind="edit.Price" />
+            <input type="number" min="0" class="filter-input" @bind="edit.Price" />
 
             <label class="edit-label">Description</label>
             <textarea class="filter-input" rows="2" @bind="edit.Description"></textarea>
@@ -196,7 +198,7 @@
             entity.CategoryId = category.Id;
             entity.Title = string.IsNullOrWhiteSpace(edit.Title) ? null : edit.Title!.Trim();
             entity.Description = string.IsNullOrWhiteSpace(edit.Description) ? null : edit.Description!.Trim();
-            entity.Price = edit.Price;
+            entity.Price = edit.Price is < 0 ? null : edit.Price;
             entity.WhatsAppAccountId = edit.WhatsAppAccountId;
             entity.InstagramAccountId = edit.InstagramAccountId;
             await InventoryRepo.UpdateListingAsync(entity);

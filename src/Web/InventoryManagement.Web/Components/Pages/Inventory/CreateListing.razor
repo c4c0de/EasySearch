@@ -32,7 +32,7 @@
     <div class="form-row">
         <div class="form-group">
             <label>Car Make</label>
-            <input class="filter-input" list="makes" @bind="model.VehicleMake"
+            <input class="filter-input" list="makes" @bind="model.VehicleMake" @bind:event="oninput"
                    placeholder="e.g. Maruti Swift, Honda City" />
             <datalist id="makes">
                 @foreach (var m in makes)
@@ -51,7 +51,7 @@
     <div class="form-row">
         <div class="form-group">
             <label>Part Type</label>
-            <input class="filter-input" list="parttypes" @bind="model.PartType"
+            <input class="filter-input" list="parttypes" @bind="model.PartType" @bind:event="oninput"
                    placeholder="e.g. Headlight, Tail Light, Diffuser" />
             <datalist id="parttypes">
                 @foreach (var c in partTypes)
@@ -62,7 +62,7 @@
         </div>
         <div class="form-group">
             <label>Price (₹) <small>(optional)</small></label>
-            <input type="number" class="filter-input" @bind="model.Price" />
+            <input type="number" min="0" class="filter-input" @bind="model.Price" @bind:after="ClampPrice" />
         </div>
     </div>
 
@@ -151,12 +151,18 @@
         }
     }
 
+    private void ClampPrice()
+    {
+        if (model.Price is < 0) model.Price = null;
+    }
+
     private async Task Save()
     {
         error = null;
         saving = true;
         try
         {
+            ClampPrice();
             var vehicle = await InventoryRepo.GetOrCreateVehicleAsync(DefaultDealerId, model.VehicleMake, model.VehicleYear);
             var category = await InventoryRepo.GetOrCreateCategoryAsync(model.PartType);
 

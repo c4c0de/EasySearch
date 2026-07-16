@@ -7,6 +7,7 @@
 @inject ISiteContentRepository ContentRepo
 @inject SiteConfigService SiteConfigSvc
 @inject IStorageService Storage
+@inject IJSRuntime JS
 
 <PageTitle>Site Settings</PageTitle>
 
@@ -29,12 +30,17 @@
 
         <div class="form-group">
             <label>Logo <small>(optional — replaces the brand text in the public header)</small></label>
+            <p class="muted-hint" style="margin-bottom:8px">Recommended: a wide logo, about 3:1 (e.g. 300×100 px or larger). PNG with a transparent background looks best. The logo is always scaled to fit — never stretched.</p>
             @if (!string.IsNullOrWhiteSpace(values[SettingKeys.LogoUrl]))
             {
                 <div class="logo-preview-row">
                     <img src="@values[SettingKeys.LogoUrl]" alt="Logo" class="logo-preview" />
                     <button class="btn-sm-danger" @onclick="RemoveLogo">Remove</button>
                 </div>
+            }
+            @if (!string.IsNullOrEmpty(logoRatioWarning))
+            {
+                <p class="logo-ratio-warning">@logoRatioWarning</p>
             }
             <ImageUpload OnUploaded="OnLogoUploaded" />
         </div>
@@ -161,6 +167,7 @@
     private Dictionary<string, string> values = SettingKeys.All.ToDictionary(k => k, _ => "");
     private bool saving;
     private bool saved;
+    private string? logoRatioWarning;
 
     protected override async Task OnInitializedAsync()
     {
@@ -179,12 +186,33 @@
         values[SettingKeys.LogoUrl] = url;
         if (!string.IsNullOrWhiteSpace(old) && old != url)
             await Storage.DeleteAsync(old);
+        await CheckLogoRatio(url);
+    }
+
+    // Non-blocking ratio advice: the logo is never distorted either way (object-fit: contain),
+    // but a wide ~3:1 image fills the 40px header slot best.
+    private async Task CheckLogoRatio(string url)
+    {
+        logoRatioWarning = null;
+        try
+        {
+            var dims = await JS.InvokeAsync<int[]>("getImageDims", url);
+            if (dims is [> 0, > 0])
+            {
+                var ratio = (double)dims[0] / dims[1];
+                if (ratio < 2.0 || ratio > 5.0)
+                    logoRatioWarning = $"This image is {dims[0]}×{dims[1]} (ratio {ratio:0.0}:1). A wide logo around 3:1 (e.g. 300×100) looks best in the header — this one will display without distortion but may appear small.";
+            }
+        }
+        catch { /* dimension check is advisory only */ }
+        StateHasChanged();
     }
 
     private async Task RemoveLogo()
     {
         var old = values[SettingKeys.LogoUrl];
         values[SettingKeys.LogoUrl] = "";
+        logoRatioWarning = null;
         if (!string.IsNullOrWhiteSpace(old))
             await Storage.DeleteAsync(old);
     }

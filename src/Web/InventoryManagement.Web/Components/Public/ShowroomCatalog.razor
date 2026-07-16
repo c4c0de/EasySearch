@@ -16,7 +16,9 @@
                        value="@filter.SearchTerm" @oninput="OnSearchInput" />
                 @if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
                 {
-                    <button class="clear-search-btn" @onclick="() => { filter.SearchTerm = null; _ = LoadListings(); }">✕</button>
+                    <button class="clear-search-btn" aria-label="Clear search" @onclick="() => { filter.SearchTerm = null; _ = LoadListings(); }">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
                 }
             </div>
         </div>
@@ -58,15 +60,15 @@
             <div class="chip-item price-chip-group">
                 <label>Price Range (₹)</label>
                 <div class="chip-price-inputs">
-                    <input type="number" class="chip-input price-input" placeholder="Min" @bind="filter.MinPrice" @bind:after="() => _ = LoadListings()" />
+                    <input type="number" min="0" class="chip-input price-input" placeholder="Min" @bind="filter.MinPrice" @bind:after="OnPriceChanged" />
                     <span>–</span>
-                    <input type="number" class="chip-input price-input" placeholder="Max" @bind="filter.MaxPrice" @bind:after="() => _ = LoadListings()" />
+                    <input type="number" min="0" class="chip-input price-input" placeholder="Max" @bind="filter.MaxPrice" @bind:after="OnPriceChanged" />
                 </div>
             </div>
 
             <div class="chip-item">
                 <label>Availability</label>
-                <select class="chip-input" @bind="StatusFilter" @bind:after="() => _ = LoadListings()">
+                <select class="chip-input chip-availability" @bind="StatusFilter" @bind:after="() => _ = LoadListings()">
                     <option value="">All Parts</option>
                     @foreach (var s in Enum.GetValues<ListingStatus>())
                     {
@@ -77,7 +79,7 @@
 
             <div class="chip-item chip-sort">
                 <label>Sort By</label>
-                <select class="chip-input" @bind="filter.SortBy" @bind:after="() => _ = LoadListings()">
+                <select class="chip-input chip-sort-select" @bind="filter.SortBy" @bind:after="() => _ = LoadListings()">
                     <option value="CreatedAt">Newest First</option>
                     <option value="Price">Price</option>
                     <option value="Make">Car Make</option>
@@ -156,10 +158,11 @@
     {
         foreach (var node in tree)
         {
+            // Non-breaking spaces render identically everywhere, so the select never resizes.
             yield return new CategoryDto
             {
                 Id = node.Id,
-                Name = new string(' ', depth * 2) + node.Name,
+                Name = string.Concat(Enumerable.Repeat("  ", depth)) + node.Name,
                 Slug = node.Slug
             };
             if (node.SubCategories?.Count > 0)

@@ -24,7 +24,7 @@
             <div class="form-row">
                 <div class="form-group">
                     <label>Branch Name</label>
-                    <input class="filter-input" @bind="fName" placeholder="e.g. Thrissur Main, Kochi Branch" />
+                    <input class="filter-input" @bind="fName" @bind:event="oninput" placeholder="e.g. Thrissur Main, Kochi Branch" />
                 </div>
                 <div class="form-group">
                     <label>Phone</label>
@@ -33,7 +33,7 @@
             </div>
             <div class="form-group">
                 <label>Address</label>
-                <textarea class="filter-input" rows="2" @bind="fAddress"></textarea>
+                <textarea class="filter-input" rows="2" @bind="fAddress" @bind:event="oninput"></textarea>
             </div>
             <div class="form-row">
                 <div class="form-group">

@@ -50,7 +50,19 @@ public abstract class CatalogBase : ComponentBase, IDisposable
 
     protected async Task OnYearChange(ChangeEventArgs e)
     {
-        filter.Year = int.TryParse(e.Value?.ToString(), out var y) ? y : null;
+        // Clamp: only sensible model years count as a filter.
+        filter.Year = int.TryParse(e.Value?.ToString(), out var y) && y is >= 1990 and <= 2030 ? y : null;
+        filter.PageNumber = 1;
+        await LoadListings();
+    }
+
+    /// <summary>Sanitize typed price bounds: negatives are dropped, inverted bounds are swapped.</summary>
+    protected async Task OnPriceChanged()
+    {
+        if (filter.MinPrice is < 0) filter.MinPrice = null;
+        if (filter.MaxPrice is < 0) filter.MaxPrice = null;
+        if (filter.MinPrice.HasValue && filter.MaxPrice.HasValue && filter.MaxPrice < filter.MinPrice)
+            (filter.MinPrice, filter.MaxPrice) = (filter.MaxPrice, filter.MinPrice);
         filter.PageNumber = 1;
         await LoadListings();
     }
