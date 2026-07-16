@@ -72,12 +72,12 @@
                         <td class="text-muted">@b.Phone</td>
                         <td>
                             @if (b.IsPrimary) { <span class="attr-filter-badge">★ Primary</span> }
-                            else { <button class="btn-sm-primary" @onclick="() => MakePrimary(b.Id)">Make primary</button> }
+                            else { <button class="btn-sm-primary" disabled="@isBusy" @onclick="() => MakePrimary(b.Id)">Make primary</button> }
                         </td>
                         <td>
-                            <button class="btn-sm-primary" @onclick="() => StartEdit(b)">Edit</button>
+                            <button class="btn-sm-primary" disabled="@isBusy" @onclick="() => StartEdit(b)">Edit</button>
                             <button class="btn-sm-danger" @onclick="() => Delete(b.Id)"
-                                    disabled="@(branches.Count <= 1)"
+                                    disabled="@(isBusy || branches.Count <= 1)"
                                     title="@(branches.Count <= 1 ? "At least one branch is required" : "")">
                                 Delete
                             </button>
@@ -94,6 +94,7 @@
 
     private List<BranchDto> branches = new();
     private bool showForm;
+    private bool isBusy;
     private Guid? editingId;
     private string fName = "", fAddress = "", fPhone = "", fEmail = "", fHours = "";
     private string? fMapsUrl;
@@ -152,15 +153,27 @@
 
     private async Task MakePrimary(Guid id)
     {
-        await ContentRepo.SetPrimaryBranchAsync(id);
-        SiteConfigSvc.Invalidate();
-        await Load();
+        if (isBusy) return;
+        isBusy = true;
+        try
+        {
+            await ContentRepo.SetPrimaryBranchAsync(id);
+            SiteConfigSvc.Invalidate();
+            await Load();
+        }
+        finally { isBusy = false; }
     }
 
     private async Task Delete(Guid id)
     {
-        await ContentRepo.DeleteBranchAsync(id);
-        SiteConfigSvc.Invalidate();
-        await Load();
+        if (isBusy) return;
+        isBusy = true;
+        try
+        {
+            await ContentRepo.DeleteBranchAsync(id);
+            SiteConfigSvc.Invalidate();
+            await Load();
+        }
+        finally { isBusy = false; }
     }
 }

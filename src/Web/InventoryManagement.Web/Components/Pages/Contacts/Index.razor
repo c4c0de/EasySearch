@@ -63,11 +63,11 @@
                                     <td>@a.Value</td>
                                     <td>
                                         @if (a.IsDefault) { <span class="attr-filter-badge">★ Default</span> }
-                                        else { <button class="btn-sm-primary" @onclick="() => MakeDefault(a.Id)">Make default</button> }
+                                        else { <button class="btn-sm-primary" disabled="@isBusy" @onclick="() => MakeDefault(a.Id)">Make default</button> }
                                     </td>
                                     <td>
-                                        <button class="btn-sm-primary" @onclick="() => StartEdit(a)">Edit</button>
-                                        <button class="btn-sm-danger" @onclick="() => Delete(a.Id)">Delete</button>
+                                        <button class="btn-sm-primary" disabled="@isBusy" @onclick="() => StartEdit(a)">Edit</button>
+                                        <button class="btn-sm-danger" disabled="@isBusy" @onclick="() => Delete(a.Id)">Delete</button>
                                     </td>
                                 </tr>
                             }
@@ -92,6 +92,7 @@
     private List<SocialAccountDto> whatsApp = new();
     private List<SocialAccountDto> instagram = new();
 
+    private bool isBusy;
     private SocialAccountType? formType;
     private Guid? editingId;
     private string newLabel = "";
@@ -162,6 +163,19 @@
         await Load();
     }
 
-    private async Task MakeDefault(Guid id) { await InventoryRepo.SetDefaultSocialAccountAsync(id); await Load(); }
-    private async Task Delete(Guid id) { await InventoryRepo.DeleteSocialAccountAsync(id); await Load(); }
+    private async Task MakeDefault(Guid id)
+    {
+        if (isBusy) return;
+        isBusy = true;
+        try { await InventoryRepo.SetDefaultSocialAccountAsync(id); await Load(); }
+        finally { isBusy = false; }
+    }
+
+    private async Task Delete(Guid id)
+    {
+        if (isBusy) return;
+        isBusy = true;
+        try { await InventoryRepo.DeleteSocialAccountAsync(id); await Load(); }
+        finally { isBusy = false; }
+    }
 }
