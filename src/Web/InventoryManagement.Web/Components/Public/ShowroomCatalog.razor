@@ -16,7 +16,7 @@
                        value="@filter.SearchTerm" @oninput="OnSearchInput" />
                 @if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
                 {
-                    <button class="clear-search-btn" aria-label="Clear search" @onclick="() => { filter.SearchTerm = null; _ = LoadListings(); }">
+                    <button class="clear-search-btn" aria-label="Clear search" @onclick="ClearSearch">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
                 }
@@ -140,10 +140,19 @@
         filter.MaxPrice.HasValue ||
         filter.Status != ListingStatus.Available;
 
+    private async Task ClearSearch()
+    {
+        filter.SearchTerm = null;
+        filter.PageNumber = 1;
+        await LoadListings();
+        StateHasChanged();
+    }
+
     private async Task ClearAllFilters()
     {
         filter = new InventoryFilterQuery { DealerId = DefaultDealerId, Status = ListingStatus.Available };
         await LoadListings();
+        StateHasChanged();
     }
 
     private async Task OnCategoryDropdownChange(ChangeEventArgs e)

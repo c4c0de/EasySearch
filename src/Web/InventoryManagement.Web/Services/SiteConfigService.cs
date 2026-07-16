@@ -67,6 +67,7 @@ public class SiteConfigService(ISiteContentRepository repo, IMemoryCache cache, 
 {
     private const string CacheKey = "site-config";
     private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(5);
+    private readonly SemaphoreSlim _lock = new(1, 1);
 
     private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
         .UseAdvancedExtensions()
@@ -78,17 +79,33 @@ public class SiteConfigService(ISiteContentRepository repo, IMemoryCache cache, 
         if (cache.TryGetValue(CacheKey, out SiteConfig? cached) && cached is not null)
             return cached;
 
-        var settings = await repo.GetAllSettingsAsync(ct);
-        // Credential keys must never reach public-facing snapshots or {{token}} replacement.
-        foreach (var key in settings.Keys.Where(k => k.StartsWith(AuthKeys.Prefix, StringComparison.OrdinalIgnoreCase)).ToList())
-            settings.Remove(key);
-        ApplyFallbacks(settings, fallback.Value);
-        var branches = await repo.GetBranchesAsync(AppConstants.DefaultDealerId, ct);
+        // Serialize DB fetches on cache miss: multiple components render concurrently during
+        // static SSR and all share the same scoped DbContext. Without this gate, they all call
+        // GetAllSettingsAsync simultaneously and hit EF's "second operation on same context" error.
+        await _lock.WaitAsync(ct);
+        try
+        {
+            // Re-check after acquiring — another caller may have populated it while we waited.
+            if (cache.TryGetValue(CacheKey, out cached) && cached is not null)
+                return cached;
 
-        var config = new SiteConfig { Settings = settings, Branches = branches };
-        cache.Set(CacheKey, config, Ttl);
-        return config;
+            var settings = await repo.GetAllSettingsAsync(ct);
+            // Credential keys must never reach public-facing snapshots or {{token}} replacement.
+            foreach (var key in settings.Keys.Where(k => k.StartsWith(AuthKeys.Prefix, StringComparison.OrdinalIgnoreCase)).ToList())
+                settings.Remove(key);
+            ApplyFallbacks(settings, fallback.Value);
+            var branches = await repo.GetBranchesAsync(AppConstants.DefaultDealerId, ct);
+
+            var config = new SiteConfig { Settings = settings, Branches = branches };
+            cache.Set(CacheKey, config, Ttl);
+            return config;
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
+
 
     public void Invalidate() => cache.Remove(CacheKey);
 

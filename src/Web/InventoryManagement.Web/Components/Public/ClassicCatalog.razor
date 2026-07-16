@@ -44,7 +44,7 @@
                        @onchange="OnYearChange" min="1990" max="2030" />
                 @if (filter.Year.HasValue)
                 {
-                    <button class="clear-btn" @onclick="() => { filter.Year = null; _ = LoadListings(); }">Clear</button>
+                    <button class="clear-btn" @onclick="ClearYear">Clear</button>
                 }
             </div>
 
@@ -53,7 +53,7 @@
                 <CategoryTree Categories="categories" SelectedId="filter.CategoryId" OnSelected="OnCategorySelected" />
                 @if (filter.CategoryId.HasValue)
                 {
-                    <button class="clear-btn" style="margin-top:4px" @onclick="() => { filter.CategoryId = null; _ = LoadListings(); }">Clear</button>
+                    <button class="clear-btn" style="margin-top:4px" @onclick="ClearCategory">Clear</button>
                 }
             </div>
 
@@ -114,3 +114,21 @@
         }
     </main>
 </div>
+
+@code {
+    private async Task ClearYear()
+    {
+        filter.Year = null;
+        filter.PageNumber = 1;
+        await LoadListings();
+        StateHasChanged();
+    }
+
+    private async Task ClearCategory()
+    {
+        filter.CategoryId = null;
+        filter.PageNumber = 1;
+        await LoadListings();
+        StateHasChanged();
+    }
+}
