@@ -37,7 +37,7 @@
                 </div>
             </div>
             <div class="form-actions">
-                <button class="btn-primary" @onclick="Save" disabled="@(string.IsNullOrWhiteSpace(newName))">
+                <button class="btn-primary" @onclick="Save" disabled="@(isBusy || string.IsNullOrWhiteSpace(newName))">
                     @(editingId.HasValue ? "Update" : "Add")
                 </button>
                 <button class="btn-secondary" @onclick="Cancel">Cancel</button>
@@ -62,6 +62,7 @@
     private List<Category> flatCategories = new();
 
     private bool showForm;
+    private bool isBusy;
     private Guid? editingId;
     private string newName = "";
     private string newParentId = "";
@@ -88,39 +89,45 @@
 
     private async Task Save()
     {
-        var slug = newName.Trim().ToLower().Replace(" ", "-");
-        Guid? parentId = Guid.TryParse(newParentId, out var pid) ? pid : null;
+        if (isBusy) return;
+        isBusy = true;
+        try
+        {
+            var slug = newName.Trim().ToLower().Replace(" ", "-");
+            Guid? parentId = Guid.TryParse(newParentId, out var pid) ? pid : null;
 
-        if (editingId.HasValue)
-        {
-            var existing = flatCategories.First(c => c.Id == editingId.Value);
-            existing.Name = newName.Trim();
-            existing.Slug = slug;
-            existing.ParentCategoryId = parentId;
-            // ICategoryRepository doesn't have Update yet — add inline via a workaround
-            // We'll add UpdateAsync to the interface/repo below
-            await CategoryRepo.UpdateAsync(existing);
-        }
-        else
-        {
-            var cat = new Category
+            if (editingId.HasValue)
             {
-                Id = Guid.NewGuid(),
-                Name = newName.Trim(),
-                Slug = slug,
-                ParentCategoryId = parentId
-            };
-            await CategoryRepo.CreateAsync(cat);
-        }
+                var existing = flatCategories.First(c => c.Id == editingId.Value);
+                existing.Name = newName.Trim();
+                existing.Slug = slug;
+                existing.ParentCategoryId = parentId;
+                await CategoryRepo.UpdateAsync(existing);
+            }
+            else
+            {
+                var cat = new Category
+                {
+                    Id = Guid.NewGuid(),
+                    Name = newName.Trim(),
+                    Slug = slug,
+                    ParentCategoryId = parentId
+                };
+                await CategoryRepo.CreateAsync(cat);
+            }
 
-        await Reload();
-        Cancel();
+            await Reload();
+            Cancel();
+        }
+        finally { isBusy = false; }
     }
 
     private async Task Delete(Guid id)
     {
-        await CategoryRepo.DeleteAsync(id);
-        await Reload();
+        if (isBusy) return;
+        isBusy = true;
+        try { await CategoryRepo.DeleteAsync(id); await Reload(); }
+        finally { isBusy = false; }
     }
 
     // Build indented display name for the parent dropdown
@@ -147,9 +154,9 @@
                     }
                 </div>
                 <div class="attr-actions">
-                    <button class="btn-sm-primary" @onclick="() => StartEdit(node)">Edit</button>
+                    <button class="btn-sm-primary" disabled="@isBusy" @onclick="() => StartEdit(node)">Edit</button>
                     <button class="btn-sm-danger" @onclick="() => Delete(node.Id)"
-                            disabled="@(node.SubCategories.Count > 0)"
+                            disabled="@(isBusy || node.SubCategories.Count > 0)"
                             title="@(node.SubCategories.Count > 0 ? "Delete sub-categories first" : "")">
                         Delete
                     </button>

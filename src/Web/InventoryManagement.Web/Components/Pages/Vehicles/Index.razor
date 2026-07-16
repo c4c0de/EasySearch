@@ -36,7 +36,7 @@
                 </div>
             </div>
             <div class="form-actions">
-                <button class="btn-primary" @onclick="Save" disabled="@(string.IsNullOrWhiteSpace(newMake))">
+                <button class="btn-primary" @onclick="Save" disabled="@(isBusy || string.IsNullOrWhiteSpace(newMake))">
                     @(editingId.HasValue ? "Update" : "Add")
                 </button>
                 <button class="btn-secondary" @onclick="Cancel">Cancel</button>
@@ -89,8 +89,8 @@
                                 }
                                 else
                                 {
-                                    <button class="btn-sm-primary" @onclick="() => StartEdit(v)">Edit</button>
-                                    <button class="btn-sm-danger" @onclick="() => confirmingId = v.Id">Delete</button>
+                                    <button class="btn-sm-primary" disabled="@isBusy" @onclick="() => StartEdit(v)">Edit</button>
+                                    <button class="btn-sm-danger" disabled="@isBusy" @onclick="() => confirmingId = v.Id">Delete</button>
                                 }
                             </td>
                         </tr>
@@ -106,6 +106,7 @@
 
     private List<VehicleDto> vehicles = new();
     private bool showForm;
+    private bool isBusy;
     private Guid? editingId;
     private Guid? confirmingId;
     private string newMake = "";
@@ -130,37 +131,48 @@
 
     private async Task Save()
     {
-        if (editingId.HasValue)
+        if (isBusy) return;
+        isBusy = true;
+        try
         {
-            var entity = await InventoryRepo.GetVehicleByIdAsync(editingId.Value);
-            if (entity is not null)
+            if (editingId.HasValue)
             {
-                entity.Make = newMake.Trim();
-                entity.Year = newYear;
-                entity.Notes = string.IsNullOrWhiteSpace(newNotes) ? null : newNotes.Trim();
-                await InventoryRepo.UpdateVehicleAsync(entity);
+                var entity = await InventoryRepo.GetVehicleByIdAsync(editingId.Value);
+                if (entity is not null)
+                {
+                    entity.Make = newMake.Trim();
+                    entity.Year = newYear;
+                    entity.Notes = string.IsNullOrWhiteSpace(newNotes) ? null : newNotes.Trim();
+                    await InventoryRepo.UpdateVehicleAsync(entity);
+                }
             }
-        }
-        else
-        {
-            await InventoryRepo.CreateVehicleAsync(new Vehicle
+            else
             {
-                Id = Guid.NewGuid(),
-                DealerId = DefaultDealerId,
-                Make = newMake.Trim(),
-                Year = newYear,
-                Notes = string.IsNullOrWhiteSpace(newNotes) ? null : newNotes.Trim()
-            });
+                await InventoryRepo.CreateVehicleAsync(new Vehicle
+                {
+                    Id = Guid.NewGuid(),
+                    DealerId = DefaultDealerId,
+                    Make = newMake.Trim(),
+                    Year = newYear,
+                    Notes = string.IsNullOrWhiteSpace(newNotes) ? null : newNotes.Trim()
+                });
+            }
+            vehicles = await InventoryRepo.GetVehiclesAsync(DefaultDealerId);
+            Cancel();
         }
-
-        vehicles = await InventoryRepo.GetVehiclesAsync(DefaultDealerId);
-        Cancel();
+        finally { isBusy = false; }
     }
 
     private async Task Delete(Guid id)
     {
-        await InventoryRepo.DeleteVehicleAsync(id);
-        confirmingId = null;
-        vehicles = await InventoryRepo.GetVehiclesAsync(DefaultDealerId);
+        if (isBusy) return;
+        isBusy = true;
+        try
+        {
+            await InventoryRepo.DeleteVehicleAsync(id);
+            confirmingId = null;
+            vehicles = await InventoryRepo.GetVehiclesAsync(DefaultDealerId);
+        }
+        finally { isBusy = false; }
     }
 }

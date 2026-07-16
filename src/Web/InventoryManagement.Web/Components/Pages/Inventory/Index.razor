@@ -52,7 +52,7 @@
                        @onchange="OnYearChange" min="1990" max="2030" />
                 @if (filter.Year.HasValue)
                 {
-                    <button class="clear-btn" @onclick="() => { filter.Year = null; _ = LoadListings(); }">Clear</button>
+                    <button class="clear-btn" @onclick="ClearYear">Clear</button>
                 }
             </div>
 
@@ -62,7 +62,7 @@
                               OnSelected="OnCategorySelected" />
                 @if (filter.CategoryId.HasValue)
                 {
-                    <button class="clear-btn" style="margin-top:4px" @onclick="() => { filter.CategoryId = null; _ = LoadListings(); }">Clear</button>
+                    <button class="clear-btn" style="margin-top:4px" @onclick="ClearCategory">Clear</button>
                 }
             </div>
 
@@ -70,16 +70,16 @@
                 <label>Price Range (₹)</label>
                 <div class="price-range">
                     <input type="number" min="0" class="filter-input" placeholder="Min"
-                           @bind="filter.MinPrice" @bind:after="() => _ = LoadListings()" />
+                           @bind="filter.MinPrice" @bind:after="OnPriceChanged" />
                     <span>–</span>
                     <input type="number" min="0" class="filter-input" placeholder="Max"
-                           @bind="filter.MaxPrice" @bind:after="() => _ = LoadListings()" />
+                           @bind="filter.MaxPrice" @bind:after="OnPriceChanged" />
                 </div>
             </div>
 
             <div class="filter-group">
                 <label>Status</label>
-                <select class="filter-input" @bind="StatusFilter" @bind:after="() => _ = LoadListings()">
+                <select class="filter-input" @bind="StatusFilter" @bind:after="OnFilterChanged">
                     <option value="">All</option>
                     @foreach (var s in Enum.GetValues<ListingStatus>())
                     {
@@ -94,7 +94,7 @@
         <div class="toolbar">
             <h2 class="page-title">Parts Inventory</h2>
             <div class="toolbar-actions">
-                <select class="filter-input sort-select" @bind="filter.SortBy" @bind:after="() => _ = LoadListings()">
+                <select class="filter-input sort-select" @bind="filter.SortBy" @bind:after="OnFilterChanged">
                     <option value="CreatedAt">Sort: Newest</option>
                     <option value="Price">Sort: Price</option>
                     <option value="Make">Sort: Car</option>
@@ -183,6 +183,32 @@
         loading = true;
         result = await InventoryRepo.GetFilteredListingsAsync(filter);
         loading = false;
+    }
+
+    private async Task ClearYear()
+    {
+        filter.Year = null; filter.PageNumber = 1;
+        await LoadListings(); StateHasChanged();
+    }
+
+    private async Task ClearCategory()
+    {
+        filter.CategoryId = null; filter.PageNumber = 1;
+        await LoadListings(); StateHasChanged();
+    }
+
+    private async Task OnPriceChanged()
+    {
+        if (filter.MinPrice is < 0) filter.MinPrice = null;
+        if (filter.MaxPrice is < 0) filter.MaxPrice = null;
+        filter.PageNumber = 1;
+        await LoadListings();
+    }
+
+    private async Task OnFilterChanged()
+    {
+        filter.PageNumber = 1;
+        await LoadListings();
     }
 
     private async Task PrevPage() { filter.PageNumber--; await LoadListings(); }

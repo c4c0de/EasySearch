@@ -111,13 +111,13 @@
         </div>
 
         <div class="listing-actions">
-            <select class="status-select" value="@Listing.Status" @onchange="HandleStatusChange">
+            <select class="status-select" value="@Listing.Status" @onchange="HandleStatusChange" disabled="@isBusy">
                 @foreach (var s in Enum.GetValues<ListingStatus>())
                 {
                     <option value="@s" selected="@(Listing.Status == s)">@s</option>
                 }
             </select>
-            <button class="btn-sm-danger" style="margin-top:6px;width:100%" @onclick="DeletePart">Delete</button>
+            <button class="btn-sm-danger" style="margin-top:6px;width:100%" disabled="@isBusy" @onclick="DeletePart">Delete</button>
         </div>
     }
 </div>
@@ -130,6 +130,7 @@
 
     private bool isEditing;
     private bool savingEdit;
+    private bool isBusy;
     private CreateListingDto edit = new();
     private List<string> makes = new();
     private List<InventoryManagement.Domain.Entities.Category> partTypes = new();
@@ -210,25 +211,37 @@
 
     private async Task HandleStatusChange(ChangeEventArgs e)
     {
+        if (isBusy) return;
         if (Enum.TryParse<ListingStatus>(e.Value?.ToString(), out var newStatus))
         {
-            var entity = await InventoryRepo.GetListingByIdAsync(Listing.Id);
-            if (entity is not null)
+            isBusy = true;
+            try
             {
-                entity.Status = newStatus;
-                await InventoryRepo.UpdateListingAsync(entity);
-                Listing.Status = newStatus;
-                await OnChanged.InvokeAsync();
+                var entity = await InventoryRepo.GetListingByIdAsync(Listing.Id);
+                if (entity is not null)
+                {
+                    entity.Status = newStatus;
+                    await InventoryRepo.UpdateListingAsync(entity);
+                    Listing.Status = newStatus;
+                    await OnChanged.InvokeAsync();
+                }
             }
+            finally { isBusy = false; }
         }
     }
 
     private async Task DeletePart()
     {
-        var imageUrl = Listing.ImageUrl;
-        await InventoryRepo.DeleteListingAsync(Listing.Id);
-        if (!string.IsNullOrEmpty(imageUrl))
-            await Storage.DeleteAsync(imageUrl);
-        await OnChanged.InvokeAsync();
+        if (isBusy) return;
+        isBusy = true;
+        try
+        {
+            var imageUrl = Listing.ImageUrl;
+            await InventoryRepo.DeleteListingAsync(Listing.Id);
+            if (!string.IsNullOrEmpty(imageUrl))
+                await Storage.DeleteAsync(imageUrl);
+            await OnChanged.InvokeAsync();
+        }
+        finally { isBusy = false; }
     }
 }
