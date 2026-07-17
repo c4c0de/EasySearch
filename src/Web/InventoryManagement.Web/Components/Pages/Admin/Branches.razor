@@ -154,7 +154,7 @@
     private async Task MakePrimary(Guid id)
     {
         if (isBusy) return;
-        isBusy = true;
+        isBusy = true; StateHasChanged();
         try
         {
             await ContentRepo.SetPrimaryBranchAsync(id);
@@ -167,7 +167,7 @@
     private async Task Delete(Guid id)
     {
         if (isBusy) return;
-        isBusy = true;
+        isBusy = true; StateHasChanged();
         try
         {
             await ContentRepo.DeleteBranchAsync(id);

@@ -253,12 +253,14 @@ public class InventoryRepository(AppDbContext context) : IInventoryRepository
             .ToListAsync(ct)).Select(ToDto).ToList();
 
     public async Task<SocialAccount?> GetSocialAccountByIdAsync(Guid id, CancellationToken ct = default)
-        => await context.SocialAccounts.FindAsync([id], ct);
+        // Fresh, untracked read — FindAsync could return a stale cached instance after
+        // ExecuteUpdate-based flag flips. Update() re-attaches the detached entity fine.
+        => await context.SocialAccounts.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, ct);
 
     public async Task<SocialAccount> CreateSocialAccountAsync(SocialAccount account, CancellationToken ct = default)
     {
         // First account of a type becomes the default automatically.
-        var hasDefault = await context.SocialAccounts.AnyAsync(
+        var hasDefault = await context.SocialAccounts.AsNoTracking().AnyAsync(
             s => s.DealerId == account.DealerId && s.Type == account.Type && s.IsDefault, ct);
         if (!hasDefault) account.IsDefault = true;
 
@@ -266,6 +268,7 @@ public class InventoryRepository(AppDbContext context) : IInventoryRepository
 
         context.SocialAccounts.Add(account);
         await context.SaveChangesAsync(ct);
+        context.ChangeTracker.Clear();
         return account;
     }
 
@@ -274,12 +277,13 @@ public class InventoryRepository(AppDbContext context) : IInventoryRepository
         if (account.IsDefault) await ClearDefaultsAsync(account.DealerId, account.Type, account.Id, ct);
         context.SocialAccounts.Update(account);
         await context.SaveChangesAsync(ct);
+        context.ChangeTracker.Clear();
     }
 
     public async Task DeleteSocialAccountAsync(Guid id, CancellationToken ct = default)
     {
-        var account = await context.SocialAccounts.FindAsync([id], ct);
-        if (account is null) return;
+        var exists = await context.SocialAccounts.AsNoTracking().AnyAsync(s => s.Id == id, ct);
+        if (!exists) return;
 
         // Unassign from any parts first (FKs are NO ACTION) so they fall back to the default.
         await context.InventoryListings.Where(l => l.WhatsAppAccountId == id)
@@ -287,17 +291,28 @@ public class InventoryRepository(AppDbContext context) : IInventoryRepository
         await context.InventoryListings.Where(l => l.InstagramAccountId == id)
             .ExecuteUpdateAsync(s => s.SetProperty(l => l.InstagramAccountId, (Guid?)null), ct);
 
-        context.SocialAccounts.Remove(account);
-        await context.SaveChangesAsync(ct);
+        await context.SocialAccounts.Where(s => s.Id == id).ExecuteDeleteAsync(ct);
+        context.ChangeTracker.Clear();
     }
 
     public async Task SetDefaultSocialAccountAsync(Guid id, CancellationToken ct = default)
     {
-        var account = await context.SocialAccounts.FindAsync([id], ct);
-        if (account is null) return;
-        await ClearDefaultsAsync(account.DealerId, account.Type, id, ct);
-        account.IsDefault = true;
-        await context.SaveChangesAsync(ct);
+        // Pure DB operation — no tracked entities (see SetPrimaryBranchAsync for the rationale:
+        // ExecuteUpdate bypasses the tracker, so tracked instances go stale and later writes no-op).
+        var target = await context.SocialAccounts.AsNoTracking()
+            .Where(s => s.Id == id)
+            .Select(s => new { s.DealerId, s.Type })
+            .FirstOrDefaultAsync(ct);
+        if (target is null) return;
+
+        await context.SocialAccounts
+            .Where(s => s.DealerId == target.DealerId && s.Type == target.Type && s.Id != id && s.IsDefault)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.IsDefault, false), ct);
+        await context.SocialAccounts
+            .Where(s => s.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.IsDefault, true), ct);
+
+        context.ChangeTracker.Clear();
     }
 
     // Clears IsDefault on all other accounts of the same dealer + type.

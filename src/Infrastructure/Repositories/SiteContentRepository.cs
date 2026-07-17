@@ -69,17 +69,21 @@ public class SiteContentRepository(AppDbContext context) : ISiteContentRepositor
             .ToListAsync(ct)).Select(ToDto).ToList();
 
     public async Task<Branch?> GetBranchByIdAsync(Guid id, CancellationToken ct = default)
-        => await context.Branches.FindAsync([id], ct);
+        // Fresh, untracked read — FindAsync could return a stale cached instance after
+        // ExecuteUpdate-based flag flips. Update() re-attaches the detached entity fine.
+        => await context.Branches.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id, ct);
 
     public async Task CreateBranchAsync(Branch branch, CancellationToken ct = default)
     {
         // First branch automatically becomes primary.
-        var hasPrimary = await context.Branches.AnyAsync(b => b.DealerId == branch.DealerId && b.IsPrimary, ct);
+        var hasPrimary = await context.Branches.AsNoTracking()
+            .AnyAsync(b => b.DealerId == branch.DealerId && b.IsPrimary, ct);
         if (!hasPrimary) branch.IsPrimary = true;
         if (branch.IsPrimary) await ClearPrimaryAsync(branch.DealerId, branch.Id, ct);
 
         context.Branches.Add(branch);
         await context.SaveChangesAsync(ct);
+        context.ChangeTracker.Clear();
     }
 
     public async Task UpdateBranchAsync(Branch branch, CancellationToken ct = default)
@@ -87,53 +91,54 @@ public class SiteContentRepository(AppDbContext context) : ISiteContentRepositor
         if (branch.IsPrimary) await ClearPrimaryAsync(branch.DealerId, branch.Id, ct);
         context.Branches.Update(branch);
         await context.SaveChangesAsync(ct);
+        context.ChangeTracker.Clear();
     }
 
     public async Task DeleteBranchAsync(Guid id, CancellationToken ct = default)
     {
-        var branch = await context.Branches.FindAsync([id], ct);
+        var branch = await context.Branches.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id, ct);
         if (branch is null) return;
 
         // Never delete the last branch — footer/policy tokens need one.
-        var count = await context.Branches.CountAsync(b => b.DealerId == branch.DealerId, ct);
+        var count = await context.Branches.AsNoTracking().CountAsync(b => b.DealerId == branch.DealerId, ct);
         if (count <= 1) return;
 
-        var wasPrimary = branch.IsPrimary;
-        context.Branches.Remove(branch);
-        await context.SaveChangesAsync(ct);
+        await context.Branches.Where(b => b.Id == id).ExecuteDeleteAsync(ct);
 
         // If the primary was deleted, promote the first remaining branch.
-        if (wasPrimary)
+        if (branch.IsPrimary)
         {
-            var next = await context.Branches
+            var nextId = await context.Branches.AsNoTracking()
                 .Where(b => b.DealerId == branch.DealerId)
                 .OrderBy(b => b.SortOrder).ThenBy(b => b.Name)
+                .Select(b => (Guid?)b.Id)
                 .FirstOrDefaultAsync(ct);
-            if (next is not null)
-            {
-                next.IsPrimary = true;
-                await context.SaveChangesAsync(ct);
-            }
+            if (nextId is not null)
+                await context.Branches.Where(b => b.Id == nextId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(b => b.IsPrimary, true), ct);
         }
+
+        context.ChangeTracker.Clear();
     }
 
     public async Task SetPrimaryBranchAsync(Guid id, CancellationToken ct = default)
     {
-        var branch = await context.Branches.FindAsync([id], ct);
-        if (branch is null) return;
+        // Pure DB operation — no tracked entities. The change tracker cannot be trusted here:
+        // ExecuteUpdate bypasses it, so tracked instances go stale and later writes no-op or
+        // resurrect old flag values. (Clear-then-set order: a crash between the two statements
+        // leaves zero primaries, which SiteConfig.PrimaryBranch already falls back from.)
+        var dealerId = await context.Branches.AsNoTracking()
+            .Where(b => b.Id == id).Select(b => (Guid?)b.DealerId).FirstOrDefaultAsync(ct);
+        if (dealerId is null) return;
 
-        // Detach before ExecuteUpdateAsync: ExecuteUpdate bypasses the change tracker, so any
-        // entity already cached with IsPrimary=true would be written back by SaveChangesAsync
-        // and silently re-corrupt the flag after the 2nd or 3rd switch.
-        context.Entry(branch).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+        await context.Branches
+            .Where(b => b.DealerId == dealerId && b.Id != id && b.IsPrimary)
+            .ExecuteUpdateAsync(s => s.SetProperty(b => b.IsPrimary, false), ct);
+        await context.Branches
+            .Where(b => b.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(b => b.IsPrimary, true), ct);
 
-        await ClearPrimaryAsync(branch.DealerId, id, ct);
-
-        // Re-attach as a minimal stub and mark only IsPrimary as modified.
-        var stub = new Branch { Id = id, IsPrimary = true };
-        context.Branches.Attach(stub);
-        context.Entry(stub).Property(b => b.IsPrimary).IsModified = true;
-        await context.SaveChangesAsync(ct);
+        context.ChangeTracker.Clear();
     }
 
     private async Task ClearPrimaryAsync(Guid dealerId, Guid exceptId, CancellationToken ct)
